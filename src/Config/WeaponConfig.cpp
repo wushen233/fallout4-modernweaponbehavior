@@ -86,11 +86,34 @@ namespace
         std::optional<std::vector<std::string>> ShowBones;
     };
 
+    struct OModReferenceOptions
+    {
+        std::optional<std::string> Plugin;
+        std::optional<std::string> FormID;
+    };
+
     struct FireModeOptions
     {
         std::optional<std::vector<BoneOptions>> AutoBones;
         std::optional<std::vector<BoneOptions>> SingleBones;
         std::optional<float>                    Blend;
+        std::optional<OModReferenceOptions>       AutomaticOMod;
+        std::optional<OModReferenceOptions>       SemiAutomaticOMod;
+    };
+
+    struct OModSwitchGroupOptions
+    {
+        std::optional<std::string> Id;
+        std::optional<std::string> Category;
+        std::optional<OModReferenceOptions> AttachPoint;
+        std::optional<std::string> Filter;
+        std::optional<std::vector<OModReferenceOptions>> OMods;
+    };
+
+    struct OModSwitchProfileOptions
+    {
+        std::string Id;
+        std::vector<OModSwitchGroupOptions> Groups;
     };
 
     template <class Options>
@@ -114,10 +137,12 @@ namespace
         std::optional<bool>            AimDownSight;
         std::optional<bool>            Slide;
         FeatureValue<FireLastOptions>  FireLast;
+        std::optional<std::vector<std::string>> OModSwitchProfiles;
     };
 
     struct ConfigFile
     {
+        std::vector<OModSwitchProfileOptions> Profiles;
         std::vector<WeaponEntry> Entries;
     };
 
@@ -141,6 +166,21 @@ struct glz::meta<LoopOptions>
 {
     using T = LoopOptions;
     static constexpr auto value = object("delay", &T::Delay);
+};
+
+template <>
+struct glz::meta<OModSwitchGroupOptions>
+{
+    using T = OModSwitchGroupOptions;
+    static constexpr auto value = object("id", &T::Id, "category", &T::Category, "attachPoint", &T::AttachPoint,
+        "filter", &T::Filter, "omods", &T::OMods);
+};
+
+template <>
+struct glz::meta<OModSwitchProfileOptions>
+{
+    using T = OModSwitchProfileOptions;
+    static constexpr auto value = object("id", &T::Id, "groups", &T::Groups);
 };
 
 template <>
@@ -196,10 +236,18 @@ struct glz::meta<SlideLockOptions>
 };
 
 template <>
+struct glz::meta<OModReferenceOptions>
+{
+    using T = OModReferenceOptions;
+    static constexpr auto value = object("plugin", &T::Plugin, "formId", &T::FormID);
+};
+
+template <>
 struct glz::meta<FireModeOptions>
 {
     using T = FireModeOptions;
-    static constexpr auto value = object("autoBones", &T::AutoBones, "singleBones", &T::SingleBones, "blend", &T::Blend);
+    static constexpr auto value = object("autoBones", &T::AutoBones, "singleBones", &T::SingleBones, "blend", &T::Blend,
+        "automaticOMod", &T::AutomaticOMod, "semiAutomaticOMod", &T::SemiAutomaticOMod);
 };
 
 template <>
@@ -211,14 +259,14 @@ struct glz::meta<WeaponEntry>
         "sprintTransitions", &T::SprintTransitions, "sightedReload", &T::SightedReload, "tacticalReload", &T::TacticalReload,
         "inspect", &T::Inspect, "ammoCheck", &T::AmmoCheck, "specialAttack", &T::SpecialAttack, "slideLock", &T::SlideLock,
         "fireModeSwitch", &T::FireModeSwitch, "aimDownSight", &T::AimDownSight, "slide", &T::Slide,
-        "fireLast", &T::FireLast);
+        "fireLast", &T::FireLast, "omodSwitchProfiles", &T::OModSwitchProfiles);
 };
 
 template <>
 struct glz::meta<ConfigFile>
 {
     using T = ConfigFile;
-    static constexpr auto value = object("entries", &T::Entries);
+    static constexpr auto value = object("entries", &T::Entries, "omodSwitchProfiles", &T::Profiles);
 };
 
 template <>
@@ -270,6 +318,9 @@ namespace
     using WeaponConfig::FireLastRule;
     using WeaponConfig::FireModeRule;
     using WeaponConfig::LoopRule;
+    using WeaponConfig::OModCategory;
+    using WeaponConfig::OModFilter;
+    using WeaponConfig::OModSwitchGroup;
     using WeaponConfig::SightedRule;
     using WeaponConfig::SlideLockRule;
     using WeaponConfig::SprintRule;
@@ -443,6 +494,7 @@ namespace
     RuleList<SightedRule>   SpecialAttackRules;
     RuleList<SlideLockRule> SlideLockRules;
     RuleList<FireModeRule>  FireModeRules;
+    RuleList<std::vector<OModSwitchGroup>> OModSwitchRules;
     RuleList<SightedRule>   AimDownSightRules;
     RuleList<SightedRule>   SlideRules;
     RuleList<FireLastRule>  FireLastRules;
@@ -452,6 +504,7 @@ namespace
     std::shared_mutex                                                            PlayerLock;
     std::array<RuleList<SightedRule>, static_cast<std::size_t>(Feature::Count)> PlayerExclusionRules;
     std::vector<WeaponConfig::PlayerExclusion>                                   PlayerData;
+    std::unordered_map<std::string, OModSwitchProfileOptions>                    OModSwitchProfiles;
     std::atomic<std::uint32_t>                                                   ConfigGeneration{ 0 };
 
     [[nodiscard]] bool IsExcluded(Feature TargetFeature, RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
@@ -876,7 +929,54 @@ namespace
             return std::nullopt;
         }
 
-        FireModeRule Rule{ .Blend = Options.Blend.value_or(0.0f) };
+        if (!Options.AutomaticOMod || !Options.SemiAutomaticOMod)
+        {
+            REX::WARN("  {}: fireModeSwitch requires both automaticOMod and semiAutomaticOMod references", Where);
+            return std::nullopt;
+        }
+
+        const auto ResolveOMod = [Where](const OModReferenceOptions& Reference, std::string_view Name) -> const RE::BGSMod::Attachment::Mod*
+        {
+            if (!Reference.FormID)
+            {
+                REX::WARN("  {}: {} needs a hexadecimal \"formId\"", Where, Name);
+                return nullptr;
+            }
+
+            if (!IsFormID(*Reference.FormID))
+            {
+                REX::WARN("  {}: {} formId '{}' must start with 0x", Where, Name, *Reference.FormID);
+                return nullptr;
+            }
+
+            return LookupFormID<RE::BGSMod::Attachment::Mod>(Reference.Plugin, *Reference.FormID, "OMOD", std::format("{} {}", Where, Name));
+        };
+
+        auto* AutomaticOMod = ResolveOMod(*Options.AutomaticOMod, "automaticOMod"sv);
+        auto* SemiAutomaticOMod = ResolveOMod(*Options.SemiAutomaticOMod, "semiAutomaticOMod"sv);
+        if (!AutomaticOMod || !SemiAutomaticOMod)
+            return std::nullopt;
+
+        if (AutomaticOMod->attachPoint.keywordIndex != SemiAutomaticOMod->attachPoint.keywordIndex)
+        {
+            REX::WARN("  {}: automaticOMod and semiAutomaticOMod must use the same attach point", Where);
+            return std::nullopt;
+        }
+
+        auto* AttachPoint = RE::detail::BGSKeywordGetTypedKeywordByIndex(
+            RE::KeywordType::kAttachPoint, AutomaticOMod->attachPoint.keywordIndex);
+        if (!AttachPoint)
+        {
+            REX::WARN("  {}: the configured fire-mode OMOD attach point could not be resolved", Where);
+            return std::nullopt;
+        }
+
+        FireModeRule Rule{
+            .AutomaticOMod = AutomaticOMod,
+            .SemiAutomaticOMod = SemiAutomaticOMod,
+            .AttachPoint = AttachPoint,
+            .Blend = Options.Blend.value_or(0.0f)
+        };
 
         for (const auto& [Key, Source, Target] : { std::tuple{ "autoBones"sv, &Options.AutoBones, &Rule.AutoBones },
                  std::tuple{ "singleBones"sv, &Options.SingleBones, &Rule.SingleBones } })
@@ -990,11 +1090,14 @@ namespace
 
     [[nodiscard]] std::string Describe(const FireModeRule& Rule)
     {
-        if (Rule.AutoBones.empty() && Rule.SingleBones.empty())
-            return {};
+        return std::format(", automatic OMOD={:08X}, semi-automatic OMOD={:08X}, {}{}, blend {:.3f}s",
+            Rule.AutomaticOMod->GetFormID(), Rule.SemiAutomaticOMod->GetFormID(),
+            DescribeBones(Rule.AutoBones, "autoBones"sv), DescribeBones(Rule.SingleBones, "singleBones"sv), Rule.Blend);
+    }
 
-        return std::format("{}{}, blend {:.3f}s", DescribeBones(Rule.AutoBones, "autoBones"sv), DescribeBones(Rule.SingleBones, "singleBones"sv),
-            Rule.Blend);
+    [[nodiscard]] std::string Describe(const std::vector<OModSwitchGroup>& Groups)
+    {
+        return std::format(", {} OMOD switch group(s)", Groups.size());
     }
 
     template <class Options>
@@ -1137,6 +1240,99 @@ namespace
                 AddRule(FireModeRules, Form, *Rule, FeatureWhere);
         }
 
+        if (Entry.OModSwitchProfiles && !Entry.OModSwitchProfiles->empty())
+        {
+            std::vector<OModSwitchGroup> Groups;
+            for (const auto& ProfileID : *Entry.OModSwitchProfiles)
+            {
+                const auto Profile = OModSwitchProfiles.find(ProfileID);
+                if (Profile == OModSwitchProfiles.end())
+                {
+                    REX::WARN("  {}: OMOD switch profile '{}' was not found", Where, ProfileID);
+                    continue;
+                }
+
+                for (std::size_t GroupIndex = 0; GroupIndex < Profile->second.Groups.size(); ++GroupIndex)
+                {
+                    const auto& Options = Profile->second.Groups[GroupIndex];
+                    const auto GroupWhere = std::format("{} profile '{}' groups[{}]", Where, ProfileID, GroupIndex);
+                    const auto ParseReference = [&](const OModReferenceOptions& Reference, std::string_view Field) -> RE::TESForm*
+                    {
+                        if (!Reference.Plugin || !Reference.FormID || !IsFormID(*Reference.FormID))
+                        {
+                            REX::WARN("  {}: {} needs plugin and hexadecimal formId", GroupWhere, Field);
+                            return nullptr;
+                        }
+                        const auto LocalID = ParseHex(*Reference.FormID);
+                        return LocalID ? LookupForm(*Reference.Plugin, *LocalID) : nullptr;
+                    };
+
+                    if (!Options.Id || Options.Id->empty() || !Options.Category || !Options.AttachPoint || !Options.Filter)
+                    {
+                        REX::WARN("  {}: group requires id, category, attachPoint, and filter", GroupWhere);
+                        continue;
+                    }
+                    const auto AttachForm = ParseReference(*Options.AttachPoint, "attachPoint"sv);
+                    const auto AttachPoint = AttachForm ? AttachForm->As<RE::BGSKeyword>() : nullptr;
+                    if (!AttachPoint)
+                        continue;
+                    const auto AttachIndex = RE::BGSKeyword::GetIndexForTypedKeyword(AttachPoint, RE::KeywordType::kAttachPoint);
+                    if (RE::detail::BGSKeywordGetTypedKeywordByIndex(RE::KeywordType::kAttachPoint, AttachIndex) != AttachPoint)
+                    {
+                        REX::WARN("  {}: configured keyword is not a typed attach point", GroupWhere);
+                        continue;
+                    }
+
+                    std::optional<OModCategory> Category;
+                    if (*Options.Category == "muzzle") Category = OModCategory::Muzzle;
+                    else if (*Options.Category == "sight") Category = OModCategory::Sight;
+                    else if (*Options.Category == "ammunition") Category = OModCategory::Ammunition;
+                    else if (*Options.Category == "underbarrel") Category = OModCategory::Underbarrel;
+                    if (!Category)
+                    {
+                        REX::WARN("  {}: unknown category '{}'", GroupWhere, *Options.Category);
+                        continue;
+                    }
+
+                    std::optional<OModFilter> Filter;
+                    if (*Options.Filter == "all") Filter = OModFilter::All;
+                    else if (*Options.Filter == "include") Filter = OModFilter::Include;
+                    else if (*Options.Filter == "exclude") Filter = OModFilter::Exclude;
+                    if (!Filter)
+                    {
+                        REX::WARN("  {}: filter must be all, include, or exclude", GroupWhere);
+                        continue;
+                    }
+
+                    OModSwitchGroup Group{ .Id = *Options.Id, .Category = *Category, .Filter = *Filter, .AttachPoint = AttachPoint };
+                    if (*Filter != OModFilter::All && (!Options.OMods || Options.OMods->empty()))
+                    {
+                        REX::WARN("  {}: include/exclude filters need at least one OMOD reference", GroupWhere);
+                        continue;
+                    }
+                    if (Options.OMods)
+                    {
+                        for (const auto& Reference : *Options.OMods)
+                        {
+                            auto* resolvedForm = ParseReference(Reference, "omods[]"sv);
+                            auto* OMod = resolvedForm ? resolvedForm->As<RE::BGSMod::Attachment::Mod>() : nullptr;
+                            if (!OMod || OMod->attachPoint.keywordIndex != AttachIndex || OMod->targetFormType != RE::ENUM_FORM_ID::kWEAP)
+                            {
+                                REX::WARN("  {}: listed OMOD is invalid or uses a different attach point", GroupWhere);
+                                Group.OMods.clear();
+                                break;
+                            }
+                            Group.OMods.push_back(OMod);
+                        }
+                    }
+                    if (*Filter == OModFilter::All || !Group.OMods.empty())
+                        Groups.push_back(std::move(Group));
+                }
+            }
+            if (!Groups.empty())
+                AddRule(OModSwitchRules, Form, Groups, std::format("{} omodSwitchProfiles", Where));
+        }
+
         if (Entry.AimDownSight.value_or(false))
             AddRule(AimDownSightRules, Form, SightedRule{}, std::format("{} aimDownSight", Where));
 
@@ -1160,7 +1356,8 @@ namespace
         const bool TurnsAnyFeatureOn = Resolve(Entry.LoopedReload) || Resolve(Entry.SprintTransitions) || Entry.SightedReload.value_or(false) ||
                                        Resolve(Entry.TacticalReload) || Resolve(Entry.Inspect) || Resolve(Entry.AmmoCheck) ||
                                        Entry.SpecialAttack.value_or(false) || Resolve(Entry.SlideLock) || Resolve(Entry.FireModeSwitch) ||
-                                       Entry.AimDownSight.value_or(false) || Entry.Slide.value_or(false) || Resolve(Entry.FireLast);
+                                       Entry.AimDownSight.value_or(false) || Entry.Slide.value_or(false) || Resolve(Entry.FireLast) ||
+                                       (Entry.OModSwitchProfiles && !Entry.OModSwitchProfiles->empty());
 
         if (!TurnsAnyFeatureOn)
         {
@@ -1267,6 +1464,47 @@ namespace
                 AddExclusion(Parsed.Entries[i], Where);
             else
                 AddEntry(Parsed.Entries[i], Where);
+        }
+    }
+
+    void ParseConfigFiles(const std::vector<std::filesystem::path>& Files)
+    {
+        std::vector<std::pair<std::string, ConfigFile>> ParsedFiles;
+        for (const auto& Path : Files)
+        {
+            const auto Name = Path.filename().string();
+            const auto Buffer = ReadText(Path);
+            if (!Buffer)
+                continue;
+            ConfigFile Parsed;
+            if (const auto Error = glz::read<ReadOptions>(Parsed, *Buffer))
+            {
+                REX::WARN("  {}: not read, nothing in it is used\n{}", Name, glz::format_error(Error, *Buffer));
+                continue;
+            }
+            ParsedFiles.emplace_back(Name, std::move(Parsed));
+        }
+
+        OModSwitchProfiles.clear();
+        for (const auto& [Name, Parsed] : ParsedFiles)
+        {
+            for (const auto& Profile : Parsed.Profiles)
+            {
+                if (Profile.Id.empty())
+                {
+                    REX::WARN("  {}: OMOD switch profile has no id", Name);
+                    continue;
+                }
+                if (!OModSwitchProfiles.emplace(Profile.Id, Profile).second)
+                    REX::WARN("  {}: duplicate OMOD switch profile '{}' ignored", Name, Profile.Id);
+            }
+        }
+
+        for (const auto& [Name, Parsed] : ParsedFiles)
+        {
+            REX::INFO("Reading {}", Name);
+            for (std::size_t i = 0; i < Parsed.Entries.size(); ++i)
+                AddEntry(Parsed.Entries[i], std::format("{} entries[{}]", Name, i));
         }
     }
 
@@ -1588,12 +1826,15 @@ namespace WeaponConfig
         SpecialAttackRules.clear();
         SlideLockRules.clear();
         FireModeRules.clear();
+        OModSwitchRules.clear();
         AimDownSightRules.clear();
         SlideRules.clear();
         FireLastRules.clear();
 
         for (auto& List : ExclusionRules)
             List.clear();
+
+        OModSwitchProfiles.clear();
 
         std::error_code Error;
 
@@ -1605,8 +1846,7 @@ namespace WeaponConfig
 
         const auto Files = JsonFiles(ConfigFolder);
 
-        for (const auto& Path : Files)
-            ParseFile<ConfigFile>(Path, ""sv);
+        ParseConfigFiles(Files);
 
         const auto ExclusionFiles = JsonFiles(ExclusionFolder);
 
@@ -1715,6 +1955,28 @@ namespace WeaponConfig
     std::optional<FireModeRule> MatchFireMode(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
     {
         return MatchUnlessExcluded(FireModeRules, Feature::FireModeSwitch, Base, Instance);
+    }
+
+    std::vector<OModSwitchGroup> MatchOModSwitchGroups(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
+    {
+        return OModSwitchRules.Match(Base, Instance).value_or(std::vector<OModSwitchGroup>{});
+    }
+
+    std::vector<RE::BGSKeyword*> OModSwitchAttachPoints()
+    {
+        std::vector<RE::BGSKeyword*> Result;
+        const auto Add = [&](const std::vector<OModSwitchGroup>& Groups)
+        {
+            for (const auto& Group : Groups)
+            {
+                if (Group.AttachPoint && std::ranges::find(Result, Group.AttachPoint) == Result.end())
+                    Result.push_back(Group.AttachPoint);
+            }
+        };
+        for (const auto& [_, Groups] : OModSwitchRules.Weapons) Add(Groups);
+        for (const auto& [_, Groups] : OModSwitchRules.Keywords) Add(Groups);
+        for (const auto& [_, Groups] : OModSwitchRules.FormLists) Add(Groups);
+        return Result;
     }
 
     bool Excluded(Feature TargetFeature, RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)

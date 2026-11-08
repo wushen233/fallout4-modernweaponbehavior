@@ -65,6 +65,9 @@ namespace
             if (WeaponActions::Refuse(*SentEvent))
                 return false;
 
+            if (const auto Accepted = FireMode::HandleWithoutAnimation(*SentEvent))
+                return *Accepted;
+
             if (FireMode::Refuse(*SentEvent))
                 return false;
 

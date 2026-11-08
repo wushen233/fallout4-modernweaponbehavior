@@ -1,0 +1,418 @@
+{
+  "modName": "ModernWeaponBehavior",
+  "displayName": "Modern Weapon Behavior",
+  "minMcmVersion": 1,
+  "pages": [
+    {
+      "pageDisplayName": "Reload",
+      "content": [
+        {
+          "type": "section",
+          "text": "Reload"
+        },
+        {
+          "id": "bEnabled:BulletInChamber",
+          "text": "Bullet in the chamber",
+          "type": "switcher",
+          "groupControl": 1,
+          "help": "Reloading with rounds left in the magazine also fills the chamber: one extra round. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bTacticalReloadOnly:BulletInChamber",
+          "text": "    Only with tactical reload",
+          "type": "switcher",
+          "help": "Bullet in the chamber only for weapons with a tactical reload. (Default: OFF)",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:DropUnspentAmmo",
+          "text": "Drop unspent ammo on reload",
+          "type": "switcher",
+          "help": "Reloading with rounds left in the magazine drops them on the ground. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:ManualReload",
+          "text": "Manual reload",
+          "type": "switcher",
+          "help": "Only the reload button reloads: an empty magazine no longer reloads by itself, and the trigger on an empty magazine dry fires. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Weapons",
+      "content": [
+        {
+          "type": "section",
+          "text": "Weapon"
+        },
+        {
+          "id": "bEnabled:SlideLock",
+          "text": "Slide lock",
+          "type": "switcher",
+          "help": "The slide or bolt stays back on an empty magazine, on weapons made for it. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:FireModeSwitch",
+          "text": "Fire mode switch (restart)",
+          "type": "switcher",
+          "help": "Lets the hotkey switch weapons between automatic and semi-automatic. Applies after a restart. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bPlayAnimation:FireModeSwitch",
+          "text": "    Play fire mode switch animation",
+          "type": "switcher",
+          "help": "Play the weapon's fire mode switch animation when one is available. Turn off to switch the OMOD immediately without an animation. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:FullEquipOnSwitch",
+          "text": "Full equip on weapon switch",
+          "type": "switcher",
+          "help": "Switching weapons plays the full equip animation instead of the quick one. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "type": "spacer"
+        },
+        {
+          "type": "section",
+          "text": "Aiming"
+        },
+        {
+          "id": "bEnabled:SightedFireJiggle",
+          "text": "Sighted fire jiggle",
+          "type": "switcher",
+          "help": "The weapon shakes a little after each shot fired while aiming. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bVanillaScopes:AimWobble",
+          "text": "Sway with regular scopes",
+          "type": "switcher",
+          "help": "The sights sway while aiming through the game's scopes. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "b3DScopes:AimWobble",
+          "text": "Sway with 3D scopes",
+          "type": "switcher",
+          "help": "The sights sway while aiming through 3D scopes. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bNoScope:AimWobble",
+          "text": "Sway without a scope",
+          "type": "switcher",
+          "help": "The sights sway while aiming with iron or reflex sights. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "type": "spacer"
+        },
+        {
+          "type": "section",
+          "text": "Combat"
+        },
+        {
+          "id": "bEnabled:HoldBlock",
+          "text": "Hold to block",
+          "type": "switcher",
+          "help": "Melee: the block lasts while you hold the block button, and you move slower. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:FireWhileSprinting",
+          "text": "Fire while sprinting",
+          "type": "switcher",
+          "help": "Firing a gun in first person no longer stops the sprint. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Movement",
+      "content": [
+        {
+          "type": "section",
+          "text": "Tactical Sprint"
+        },
+        {
+          "id": "bEnabled:TacticalSprint",
+          "text": "Enabled",
+          "type": "switcher",
+          "groupControl": 2,
+          "help": "Press sprint again while sprinting for a faster sprint that drains more action points. First person. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "fSpeedMult:TacticalSprint",
+          "text": "    Speed",
+          "type": "slider",
+          "help": "Tactical sprint speed, times the sprint's. (Default: 1.3)",
+          "groupCondition": 2,
+          "valueOptions": {
+            "min": 1.0,
+            "max": 3.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "id": "fActionPointsMult:TacticalSprint",
+          "text": "    Action points drain",
+          "type": "slider",
+          "help": "Action points drained, times the sprint's. (Default: 1.3)",
+          "groupCondition": 2,
+          "valueOptions": {
+            "min": 1.0,
+            "max": 3.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "id": "fAnimationSpeedMult:TacticalSprint",
+          "text": "    Animation speed",
+          "type": "slider",
+          "help": "Sprint animation speed, for weapons without a tactical sprint animation. (Default: 1.25)",
+          "groupCondition": 2,
+          "valueOptions": {
+            "min": 1.0,
+            "max": 3.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "type": "spacer"
+        },
+        {
+          "type": "section",
+          "text": "Slide"
+        },
+        {
+          "id": "bEnabled:Slide",
+          "text": "Enabled",
+          "type": "switcher",
+          "groupControl": 3,
+          "help": "Crouch while sprinting to slide forward; crouch again to stand up. First person. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "fDuration:Slide",
+          "text": "    Duration",
+          "type": "slider",
+          "help": "How long the slide lasts, in seconds. (Default: 0.6)",
+          "groupCondition": 3,
+          "valueOptions": {
+            "min": 0.1,
+            "max": 2.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "id": "fCommittedTime:Slide",
+          "text": "    Committed time",
+          "type": "slider",
+          "help": "Time at the start of the slide when you cannot aim, fire or stand up, in seconds. (Default: 0.05)",
+          "groupCondition": 3,
+          "valueOptions": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "id": "fSpeedMult:Slide",
+          "text": "    Speed",
+          "type": "slider",
+          "help": "Starting speed of the slide, times the sprint's. (Default: 1.25)",
+          "groupCondition": 3,
+          "valueOptions": {
+            "min": 1.0,
+            "max": 3.0,
+            "step": 0.05,
+            "sourceType": "ModSettingFloat"
+          }
+        },
+        {
+          "type": "spacer"
+        },
+        {
+          "type": "section",
+          "text": "Camera"
+        },
+        {
+          "id": "bEnabled:ThirdPersonSprintFOV",
+          "text": "Third person sprint field of view",
+          "type": "switcher",
+          "help": "The camera widens while sprinting in third person. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Interface",
+      "content": [
+        {
+          "type": "section",
+          "text": "HUD"
+        },
+        {
+          "id": "bEnabled:WeaponHUD",
+          "text": "Weapon HUD",
+          "type": "switcher",
+          "help": "Replaces the ammo counter with a weapon module: name, ammo, fire mode and grenades. (Default: ON)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEveryGun:AmmoCheck",
+          "text": "Ammo check on every gun",
+          "type": "switcher",
+          "help": "The Check ammo hotkey also shows how full the magazine is on guns without an ammo check animation. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Exclusions",
+      "content": [
+        {
+          "type": "section",
+          "text": "Exclusions"
+        },
+        {
+          "type": "text",
+          "html": true,
+          "text": "Take Modern Weapon Behavior features away from the weapons you choose, <u>by weapon or by keyword</u>. Changes apply at once and are saved in MCM\\Settings\\MWB_Exclusions.json."
+        },
+        {
+          "type": "spacer"
+        },
+        {
+          "text": "-> Manage exclusions",
+          "type": "customClipLoader",
+          "help": "Opens the exclusion panel for the weapon in your hands.",
+          "valueOptions": {
+            "clipSource": "MWB_Exclusions.swf"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Hotkeys",
+      "content": [
+        {
+          "type": "section",
+          "text": "General"
+        },
+        {
+          "id": "MWBMCMHKInspect",
+          "text": "Inspect weapon",
+          "type": "hotkey",
+          "help": "Plays the inspect animation, on weapons made for it."
+        },
+        {
+          "id": "MWBMCMHKAmmoCheck",
+          "text": "Check ammo",
+          "type": "hotkey",
+          "help": "Plays the ammo check animation and shows how full the magazine is, on weapons made for it (every gun: see Interface)."
+        },
+        {
+          "id": "MWBMCMHKSwitchFireMode",
+          "text": "Switch fire mode",
+          "type": "hotkey",
+          "help": "Switches the weapon between automatic and semi-automatic, on weapons made for it."
+        },
+        {
+          "id": "MWBMCMHKSwitchMuzzleOMod",
+          "text": "Switch muzzle OMOD",
+          "type": "hotkey",
+          "help": "Cycles the configured muzzle OMOD group on the equipped weapon."
+        },
+        {
+          "id": "MWBMCMHKSwitchSightOMod",
+          "text": "Switch sight OMOD",
+          "type": "hotkey",
+          "help": "Cycles the configured sight OMOD group on the equipped weapon."
+        },
+        {
+          "id": "MWBMCMHKSwitchAmmunitionOMod",
+          "text": "Switch ammunition OMOD",
+          "type": "hotkey",
+          "help": "Cycles the configured ammunition OMOD group on the equipped weapon."
+        },
+        {
+          "id": "MWBMCMHKSwitchUnderbarrelOMod",
+          "text": "Switch underbarrel OMOD",
+          "type": "hotkey",
+          "help": "Cycles the configured underbarrel OMOD group on the equipped weapon."
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Debug",
+      "content": [
+        {
+          "type": "section",
+          "text": "Mod authors"
+        },
+        {
+          "id": "bVerboseLog:General",
+          "text": "Detailed log",
+          "type": "switcher",
+          "help": "Logs every step of every feature to MWB.log, for testing weapons. (Default: OFF)",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@
 */
 
 #include "Papyrus.h"
+#include "Core/OModSwitch.h"
 #include "HUD/AmmoCheckDisplay.h"
 #include "Settings/Settings.h"
 
@@ -62,6 +63,26 @@ namespace
     {
         return Send("MWB_SwitchFireModeStart");
     }
+
+    bool SwitchMuzzleOMod(GlobalFunctionSelf)
+    {
+        return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Muzzle);
+    }
+
+    bool SwitchSightOMod(GlobalFunctionSelf)
+    {
+        return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Sight);
+    }
+
+    bool SwitchAmmunitionOMod(GlobalFunctionSelf)
+    {
+        return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
+    }
+
+    bool SwitchUnderbarrelOMod(GlobalFunctionSelf)
+    {
+        return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Underbarrel);
+    }
 }
 
 namespace Papyrus
@@ -86,6 +107,12 @@ namespace Papyrus
             VM->BindNativeMethod(ScriptName, "SpecialAttack", SpecialAttack);
             VM->BindNativeMethod(ScriptName, "StopArmAnimation", StopArmAnimation);
             VM->BindNativeMethod(ScriptName, "SwitchFireMode", SwitchFireMode);
+            VM->BindNativeMethod(ScriptName, "SwitchMuzzleOMod", SwitchMuzzleOMod);
+            VM->BindNativeMethod(ScriptName, "SwitchSightOMod", SwitchSightOMod);
+            VM->BindNativeMethod(ScriptName, "SwitchAmmunitionOMod", SwitchAmmunitionOMod);
+            VM->BindNativeMethod(ScriptName, "SwitchUnderbarrelOMod", SwitchUnderbarrelOMod);
+            if (!OModSwitch::RegisterPapyrusFunctions(VM))
+                return false;
             REX::INFO("Papyrus functions registered on \"{}\"", ScriptName);
 
             return true;

@@ -18,19 +18,13 @@
 #include "Core/EquippedWeapon.h"
 #include "Settings/Settings.h"
 
+#include <F4SE/API.h>
+
 namespace
 {
-    constexpr std::string_view Plugin = "Modern Weapon Behavior.esp"sv;
-    constexpr std::uint32_t AttachPointID = 0x800;
-    constexpr std::uint32_t AutoModID = 0x801;
-    constexpr std::uint32_t SingleModID = 0x802;
-
     constexpr RE::TESFormID SoundAutoKeywordID = 0x0A191C;
     constexpr RE::TESFormID WeaponTypeAutomaticID = 0x04A0A2;
 
-    RE::BGSKeyword* AttachPoint{ nullptr };
-    RE::BGSMod::Attachment::Mod* AutoMod{ nullptr };
-    RE::BGSMod::Attachment::Mod* SingleMod{ nullptr };
     std::array<RE::BGSKeyword*, 2> ModeKeywords{};
 
     std::optional<RE::BSFixedString> StartEvent;
@@ -40,11 +34,8 @@ namespace
 
     std::atomic<bool> Pending{ false };
     std::atomic<bool> Requested{ false };
-
-    [[nodiscard]] bool Ready()
-    {
-        return AttachPoint && AutoMod && SingleMod;
-    }
+    std::atomic<bool> SwitchTaskQueued{ false };
+    std::atomic<std::uint32_t> SwitchGeneration{ 0 };
 
     void AddAttachParent(RE::BGSAttachParentArray& Parents, RE::BGSKeyword* Keyword)
     {
@@ -190,8 +181,15 @@ namespace
             return;
         }
 
+        const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
+        if (!Rule)
+        {
+            NotSwitched("the weapon has no valid fireModeSwitch configuration"sv);
+            return;
+        }
+
         const bool Automatic = !Weapon->Instance->flags.all(RE::WEAPON_FLAGS::kAutomatic);
-        const auto Mod = Automatic ? AutoMod : SingleMod;
+        const auto Mod = Automatic ? Rule->AutomaticOMod : Rule->SemiAutomaticOMod;
         const bool OwnInstance = Weapon->Item && Weapon->Item->item.instanceData;
 
         std::uint32_t StackID = 0;
@@ -263,6 +261,47 @@ namespace
         REX::INFO("Fire mode: weapon {:08X} -> {}{}", Weapon->Base->GetFormID(), Automatic ? "automatic" : "semi-automatic",
             Keywords ? "" : " (sound and perk keywords from the next load: the instance has no keyword list of its own)");
     }
+
+    void QueueSwitchTask()
+    {
+        // The fire-mode switch uses MWB's original stack-extra mutation path.
+        bool expected = false;
+        if (!SwitchTaskQueued.compare_exchange_strong(expected, true))
+            return;
+
+        const auto Tasks = F4SE::GetTaskInterface();
+        if (!Tasks)
+        {
+            SwitchTaskQueued = false;
+            NotSwitched("F4SE game task interface is unavailable"sv);
+            return;
+        }
+
+        const auto Generation = SwitchGeneration.load();
+        Tasks->AddUITask([Generation]()
+        {
+            if (Generation != SwitchGeneration.load())
+                return;
+
+            const auto Player = RE::PlayerCharacter::GetSingleton();
+            if (!Player)
+            {
+                SwitchTaskQueued = false;
+                NotSwitched("player is unavailable on the game task queue"sv);
+                return;
+            }
+
+            if (const auto Reason = WhyNot(Player))
+            {
+                SwitchTaskQueued = false;
+                NotSwitched(*Reason);
+                return;
+            }
+
+            Switch(Player);
+            SwitchTaskQueued = false;
+        });
+    }
 }
 
 namespace FireMode
@@ -274,47 +313,38 @@ namespace FireMode
         DoneEvent.emplace("MWB_SwitchFireModeDone");
         ExitEvent.emplace("MWB_SwitchFireModeExit");
 
-        if (!Settings::FireModeSwitch())
-        {
-            REX::INFO("Fire mode: off in the INI; the attach point is not added, so the next load drops the fire mode OMODs");
-            return;
-        }
-
-        const auto KeywordForm = WeaponConfig::LookupPluginForm(Plugin, AttachPointID);
-        const auto AutoForm = WeaponConfig::LookupPluginForm(Plugin, AutoModID);
-        const auto SingleForm = WeaponConfig::LookupPluginForm(Plugin, SingleModID);
-        AttachPoint = KeywordForm ? KeywordForm->As<RE::BGSKeyword>() : nullptr;
-        AutoMod = AutoForm ? AutoForm->As<RE::BGSMod::Attachment::Mod>() : nullptr;
-        SingleMod = SingleForm ? SingleForm->As<RE::BGSMod::Attachment::Mod>() : nullptr;
         ModeKeywords = { RE::TESForm::GetFormByID<RE::BGSKeyword>(SoundAutoKeywordID),
             RE::TESForm::GetFormByID<RE::BGSKeyword>(WeaponTypeAutomaticID) };
 
-        if (!Ready())
+        if (!Settings::FireModeSwitch())
         {
-            REX::WARN("Fire mode: {} is not loaded (or lacks its records); fire mode switching is off", Plugin);
-            AttachPoint = nullptr;
+            REX::INFO("Fire mode: off in the INI; configured attach points are not added, so the next load drops the fire mode OMODs");
             return;
         }
 
         const auto DataHandler = RE::TESDataHandler::GetSingleton();
         std::uint32_t Added = 0;
-        std::uint32_t Total = 0;
+        std::uint32_t Configured = 0;
 
         for (const auto Weapon : DataHandler->GetFormArray<RE::TESObjectWEAP>())
         {
             if (!Weapon)
                 continue;
 
-            ++Total;
+            const auto Rule = WeaponConfig::MatchFireMode(Weapon, nullptr);
+            if (!Rule || !Rule->AttachPoint)
+                continue;
 
-            if (!Weapon->attachParents.HasKeyword(AttachPoint))
+            ++Configured;
+
+            if (!Weapon->attachParents.HasKeyword(Rule->AttachPoint))
             {
-                AddAttachParent(Weapon->attachParents, AttachPoint);
+                AddAttachParent(Weapon->attachParents, Rule->AttachPoint);
                 ++Added;
             }
         }
 
-        REX::INFO("Fire mode: ap_MWB_FireMode added to {} of {} weapons", Added, Total);
+        REX::INFO("Fire mode: configured OMOD attach points added to {} of {} matching weapons", Added, Configured);
     }
 
     bool Refuse(const RE::BSFixedString& Event)
@@ -322,12 +352,44 @@ namespace FireMode
         if (!StartEvent || Event != *StartEvent)
             return false;
 
-        const auto Reason = Ready() ? WhyNot(RE::PlayerCharacter::GetSingleton()) : std::optional<std::string>{ "the feature is off"s };
+        const auto Reason = Settings::FireModeSwitch() ? WhyNot(RE::PlayerCharacter::GetSingleton()) :
+                                                         std::optional<std::string>{ "the feature is off"s };
 
         if (Reason)
             REX::INFO("Fire mode: {} refused, {}", Event.c_str(), *Reason);
 
         return Reason.has_value();
+    }
+
+    std::optional<bool> HandleWithoutAnimation(const RE::BSFixedString& Event)
+    {
+        if (!StartEvent || Event != *StartEvent || !Settings::FireModeSwitch())
+            return std::nullopt;
+
+        const auto Player = RE::PlayerCharacter::GetSingleton();
+        const auto Weapon = Core::GetEquippedWeapon(Player);
+
+        if (!Weapon)
+            return std::nullopt;
+
+        const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
+
+        if (!Rule || Settings::FireModeSwitchAnimation())
+            return std::nullopt;
+
+        if (const auto Reason = WhyNot(Player))
+        {
+            REX::INFO("Fire mode: {} refused, {}", Event.c_str(), *Reason);
+            return false;
+        }
+
+        Pending = false;
+        Requested = true;
+
+        if (Settings::VerboseLog())
+            REX::INFO("Fire mode: {} accepted without an animation", Event.c_str());
+
+        return true;
     }
 
     void OnEventSent(const RE::BSFixedString& Event, bool Accepted)
@@ -366,13 +428,15 @@ namespace FireMode
 
     void Tick(RE::PlayerCharacter* Player)
     {
-        if (Requested.exchange(false))
-            Switch(Player);
+        if (Requested.exchange(false) && Player)
+            QueueSwitchTask();
     }
 
     void Reset()
     {
         Pending = false;
         Requested = false;
+        SwitchGeneration.fetch_add(1);
+        SwitchTaskQueued = false;
     }
 }

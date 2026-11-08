@@ -10,6 +10,7 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 * Looped reload the way Bethesda does it in Fallout 76 and Starfield: one shell per pass, blended passes, cancel at the end of the pass with the fire or reload button (the end of the clip always plays), and the aim kept from cutting the reload short.
 * Tactical reload, sighted reload, sprint transitions and sprinting equips, chosen per weapon through JSON files, by weapon, keyword or form list.
 * Inspect, ammo check (with an on-screen magazine readout, optionally on every gun), special attack and fire mode switch, callable from Papyrus and MCM hotkeys.
+* Papyrus functions for attaching, detaching, querying and replacing OMODs on individual inventory stacks, including equipped-item refresh.
 * Arm-only animations, one per arm at a time (a new one restarts the arm unless either is locked), with weapon lock (guns and melee weapons), slide lock (with lock and release sounds, nodes hidden while locked, and an option to wait for the last shot clip) and per fire mode weapon bone poses.
 * Animation annotations to fire ammo, use items and cast spells from any animation.
 * Weapon HUD module (with the names given at the workbench), bullet in the chamber, drop unspent ammo on reload and manual reload, where only the reload button reloads and the trigger on an empty magazine dry fires (the last three with per weapon exclusions).
@@ -22,6 +23,72 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 * Animation clips missing from the AnimTextData still load.
 * A setting to play the full equip animation instead of the quick one when switching weapons from favorites.
 * An exclusion panel inside the MCM: players take any feature away from the weapon in hand, or from every weapon with one of its keywords, and it applies at once.
+
+## Fire mode switch animation
+
+Fire mode switching plays `WPNSwitchFireMode.hkx` by default. The global MCM option **Play fire mode switch animation** controls whether a switching clip is requested; when it is off, MWB applies the configured mode change directly without requiring the clip. This is a global setting and does not belong in individual weapon JSON files:
+
+```json
+{
+  "plugin": "Fallout4.esm",
+  "weapon": "0x00004822",
+  "fireModeSwitch": {
+    "automaticOMod": {
+      "plugin": "Modern Weapon Behavior.esp",
+      "formId": "0x00000801"
+    },
+    "semiAutomaticOMod": {
+      "plugin": "Modern Weapon Behavior.esp",
+      "formId": "0x00000802"
+    }
+  }
+}
+```
+
+Both OMOD references are required and must use the same attach point. The plugin name and plugin-local FormID can refer to any loaded plugin. The animation setting defaults to on, preserving the existing animation-driven behavior.
+
+Fire-mode configurations that omit either OMOD reference are rejected with a warning; add both references when migrating an existing configuration.
+
+## Generic OMOD switch groups
+
+Shared OMOD switch profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. Weapon entries reference one or more profile IDs using `omodSwitchProfiles`. Each group selects one MCM hotkey category (`muzzle`, `sight`, `ammunition`, or `underbarrel`), an attach-point keyword, and a filter mode:
+
+* `all`: cycle loaded weapon OMODs at that attach point, except records with additional parent or instantiation-filter constraints.
+* `include`: cycle only OMODs listed in `omods`.
+* `exclude`: cycle OMODs at that attach point except those listed in `omods`, with the same compatibility-constraint exclusions as `all`.
+
+Each equipped weapon may have at most one group for a hotkey category. The four category hotkeys are bound on the MCM **Hotkeys** page. An example profile and weapon entry:
+
+```json
+{
+  "omodSwitchProfiles": [
+    {
+      "id": "example.muzzle",
+      "groups": [
+        {
+          "id": "muzzle",
+          "category": "muzzle",
+          "attachPoint": { "plugin": "ExampleWeapon.esp", "formId": "0x00000800" },
+          "filter": "include",
+          "omods": [
+            { "plugin": "ExampleWeapon.esp", "formId": "0x00000801" },
+            { "plugin": "ExampleWeapon.esp", "formId": "0x00000802" }
+          ]
+        }
+      ]
+    }
+  ],
+  "entries": [
+    {
+      "plugin": "ExampleWeapon.esp",
+      "weapon": "0x00000810",
+      "omodSwitchProfiles": [ "example.muzzle" ]
+    }
+  ]
+}
+```
+
+The attach point is injected into configured weapon records at data-ready time so the engine can construct the selected OMOD instance. Generic OMOD switching currently requires the equipped weapon instance to be uniquely resolvable; unsupported or ambiguous stacks fail without changing the weapon.
 
 ## Supported Runtimes
 
@@ -54,6 +121,10 @@ xmake build
 ```
 
 The plugin is written to `build/windows/x64/releasedbg/MWB.dll`, with its `MWB.pdb` next to it.
+
+## Papyrus OMOD API
+
+`MWBOModSwitch.SetItemOMod`, `HasItemOMod`, `GetEquippedStackIndex` and `ReplaceItemOMod` operate on inventory stacks. Equipped weapons are refreshed without a visible unequip/equip cycle when their instance data can be resolved safely. Equipped non-weapons are rejected because their biped refresh path is not implemented. Replacement OMODs must share a valid attach point. See `papyrus/Source/User/MWBOModSwitch.psc` for declarations.
 
 [CommonLibF4](https://github.com/Dear-Modding-FO4/commonlibf4) comes as a git submodule in `lib/commonlibf4`, pinned to the exact commit the release was built with: [`2fc2bf95`](https://github.com/Dear-Modding-FO4/commonlibf4/tree/2fc2bf95e264f946d67102b2eef6286fad6d9f36). If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
 

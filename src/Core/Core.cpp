@@ -13,6 +13,7 @@
 */
 
 #include "Core.h"
+#include "Core/OModSwitch.h"
 #include "Actions/FirstPerson.h"
 #include "Actions/WeaponActions.h"
 #include "Magic/MagicAnnotations.h"
@@ -106,6 +107,7 @@ namespace Core
         FirstPerson::Initialize();
         AmmoCheckDisplay::Initialize();
         FireMode::Initialize();
+        OModSwitch::Initialize();
         Hooks::InstallAnimationEventHook();
         Hooks::InstallActorAnimationEventHook();
         Hooks::InstallNotifyAnimationGraphHook();

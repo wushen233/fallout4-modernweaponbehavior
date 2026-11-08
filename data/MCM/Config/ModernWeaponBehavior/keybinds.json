@@ -1,0 +1,52 @@
+{
+  "modName": "ModernWeaponBehavior",
+  "keybinds": [
+    {
+      "id": "MWBMCMHKInspect",
+      "desc": "Inspect weapon",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "Inspect"
+      }
+    },
+    {
+      "id": "MWBMCMHKAmmoCheck",
+      "desc": "Check ammo",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "AmmoCheck"
+      }
+    },
+    {
+      "id": "MWBMCMHKSwitchFireMode",
+      "desc": "Switch fire mode",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "SwitchFireMode"
+      }
+    },
+    {
+      "id": "MWBMCMHKSwitchMuzzleOMod",
+      "desc": "Switch muzzle OMOD",
+      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchMuzzleOMod" }
+    },
+    {
+      "id": "MWBMCMHKSwitchSightOMod",
+      "desc": "Switch sight OMOD",
+      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchSightOMod" }
+    },
+    {
+      "id": "MWBMCMHKSwitchAmmunitionOMod",
+      "desc": "Switch ammunition OMOD",
+      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchAmmunitionOMod" }
+    },
+    {
+      "id": "MWBMCMHKSwitchUnderbarrelOMod",
+      "desc": "Switch underbarrel OMOD",
+      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchUnderbarrelOMod" }
+    }
+  ]
+}
