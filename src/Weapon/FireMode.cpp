@@ -16,6 +16,7 @@
 #include "Actions/FirstPerson.h"
 #include "Config/WeaponConfig.h"
 #include "Core/EquippedWeapon.h"
+#include "Reload/SightedReload.h"
 #include "Settings/Settings.h"
 
 #include <F4SE/API.h>
@@ -99,6 +100,14 @@ namespace
         if (!Weapon)
             return "no drawn weapon"s;
 
+        if (Player->Is3rdPersonVisible())
+        {
+            if (!Player->GetWeaponMagicDrawn())
+                return "no drawn weapon"s;
+            if (SightedReload::AimButtonHeld())
+                return "aiming"s;
+        }
+
         const auto ID = Weapon->Base->GetFormID();
 
         if (!WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance))
@@ -107,7 +116,7 @@ namespace
         if (IsCharging(*Weapon->Instance))
             return std::format("the weapon {:08X} charges its shots", ID);
 
-        if (auto Busy = FirstPerson::WeaponBusy(Player))
+        if (auto Busy = FirstPerson::WeaponBusy(Player, true))
             return Busy;
 
         if (const auto List = Player->inventoryList)
@@ -374,7 +383,8 @@ namespace FireMode
 
         const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
 
-        if (!Rule || Settings::FireModeSwitchAnimation())
+        const bool ThirdPerson = Player->Is3rdPersonVisible();
+        if (!Rule || (!ThirdPerson && Settings::FireModeSwitchAnimation()))
             return std::nullopt;
 
         if (const auto Reason = WhyNot(Player))
@@ -387,7 +397,7 @@ namespace FireMode
         Requested = true;
 
         if (Settings::VerboseLog())
-            REX::INFO("Fire mode: {} accepted without an animation", Event.c_str());
+            REX::INFO("Fire mode: {} accepted without an animation ({})", Event.c_str(), ThirdPerson ? "third person" : "first person");
 
         return true;
     }

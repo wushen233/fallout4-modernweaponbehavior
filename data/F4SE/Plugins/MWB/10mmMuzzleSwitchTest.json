@@ -1,0 +1,41 @@
+{
+  "omodSwitchProfiles": [
+    {
+      "id": "test.10mm.muzzle",
+      "groups": [
+        {
+          "id": "standardSuppressor",
+          "category": "muzzle",
+          "attachPoint": { "plugin": "Fallout4.esm", "formId": "0x0002249C" },
+          "filter": "include",
+          "omods": [
+            { "plugin": "Fallout4.esm", "formId": "0x0004F21D" },
+            { "plugin": "Fallout4.esm", "formId": "0x000D2A94" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "test.10mm.sight",
+      "groups": [
+        {
+          "id": "ironReflex",
+          "category": "sight",
+          "attachPoint": { "plugin": "Fallout4.esm", "formId": "0x00022499" },
+          "filter": "include",
+          "omods": [
+            { "plugin": "Fallout4.esm", "formId": "0x00148409" },
+            { "plugin": "Fallout4.esm", "formId": "0x000E34D8" }
+          ]
+        }
+      ]
+    }
+  ],
+  "entries": [
+    {
+      "plugin": "Fallout4.esm",
+      "weapon": "0x00004822",
+      "omodSwitchProfiles": [ "test.10mm.muzzle", "test.10mm.sight" ]
+    }
+  ]
+}

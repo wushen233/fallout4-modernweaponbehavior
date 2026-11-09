@@ -116,6 +116,20 @@ namespace
         std::vector<OModSwitchGroupOptions> Groups;
     };
 
+    struct AmmoSwitchTypeOptions
+    {
+        OModReferenceOptions Ammo;
+        std::optional<OModReferenceOptions> OMod;
+    };
+
+    struct AmmoSwitchProfileOptions
+    {
+        std::string Id;
+        OModReferenceOptions BaseAmmo;
+        std::optional<OModReferenceOptions> BaseOMod;
+        std::vector<AmmoSwitchTypeOptions> AmmoTypes;
+    };
+
     template <class Options>
     using FeatureValue = std::optional<std::variant<bool, Options>>;
 
@@ -143,6 +157,7 @@ namespace
     struct ConfigFile
     {
         std::vector<OModSwitchProfileOptions> Profiles;
+        std::vector<AmmoSwitchProfileOptions> AmmoProfiles;
         std::vector<WeaponEntry> Entries;
     };
 
@@ -181,6 +196,21 @@ struct glz::meta<OModSwitchProfileOptions>
 {
     using T = OModSwitchProfileOptions;
     static constexpr auto value = object("id", &T::Id, "groups", &T::Groups);
+};
+
+template <>
+struct glz::meta<AmmoSwitchTypeOptions>
+{
+    using T = AmmoSwitchTypeOptions;
+    static constexpr auto value = object("ammo", &T::Ammo, "omod", &T::OMod);
+};
+
+template <>
+struct glz::meta<AmmoSwitchProfileOptions>
+{
+    using T = AmmoSwitchProfileOptions;
+    static constexpr auto value = object("id", &T::Id, "baseAmmo", &T::BaseAmmo, "baseOMod", &T::BaseOMod,
+        "ammoTypes", &T::AmmoTypes);
 };
 
 template <>
@@ -266,7 +296,8 @@ template <>
 struct glz::meta<ConfigFile>
 {
     using T = ConfigFile;
-    static constexpr auto value = object("entries", &T::Entries, "omodSwitchProfiles", &T::Profiles);
+    static constexpr auto value = object("entries", &T::Entries, "omodSwitchProfiles", &T::Profiles,
+        "ammoSwitchProfiles", &T::AmmoProfiles);
 };
 
 template <>
@@ -505,6 +536,13 @@ namespace
     std::array<RuleList<SightedRule>, static_cast<std::size_t>(Feature::Count)> PlayerExclusionRules;
     std::vector<WeaponConfig::PlayerExclusion>                                   PlayerData;
     std::unordered_map<std::string, OModSwitchProfileOptions>                    OModSwitchProfiles;
+    std::unordered_map<const RE::TESAmmo*, WeaponConfig::AmmoSwitchProfile>     AmmoSwitchProfiles;
+    struct AmmoSwitchLookup
+    {
+        const RE::TESAmmo* BaseAmmo{ nullptr };
+        std::size_t TypeIndex{ 0 };
+    };
+    std::unordered_map<const RE::TESAmmo*, AmmoSwitchLookup>                    AmmoSwitchLookups;
     std::atomic<std::uint32_t>                                                   ConfigGeneration{ 0 };
 
     [[nodiscard]] bool IsExcluded(Feature TargetFeature, RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
@@ -1374,6 +1412,120 @@ namespace
         VisitEntryForm(Entry, Where, [&](const auto* Form) { AddFeatures(Entry, Form, Where); });
     }
 
+    [[nodiscard]] const RE::TESAmmo* ParseAmmoReference(const OModReferenceOptions& Reference, std::string_view Where)
+    {
+        if (!Reference.Plugin || !Reference.FormID)
+        {
+            REX::WARN("  {}: ammo reference needs plugin and hexadecimal formId", Where);
+            return nullptr;
+        }
+        return LookupFormID<RE::TESAmmo>(Reference.Plugin, *Reference.FormID, "AMMO", Where);
+    }
+
+    [[nodiscard]] const RE::BGSMod::Attachment::Mod* ParseAmmoOModReference(const OModReferenceOptions& Reference, std::string_view Where)
+    {
+        if (!Reference.Plugin || !Reference.FormID)
+        {
+            REX::WARN("  {}: OMOD reference needs plugin and hexadecimal formId", Where);
+            return nullptr;
+        }
+        return LookupFormID<RE::BGSMod::Attachment::Mod>(Reference.Plugin, *Reference.FormID, "OMOD", Where);
+    }
+
+    void AddAmmoSwitchProfile(const AmmoSwitchProfileOptions& Options, std::string_view Where)
+    {
+        if (Options.Id.empty())
+        {
+            REX::WARN("  {}: ammo switch profile has no id", Where);
+            return;
+        }
+
+        const auto BaseAmmo = ParseAmmoReference(Options.BaseAmmo, std::format("{} baseAmmo", Where));
+        if (!BaseAmmo)
+            return;
+
+        WeaponConfig::AmmoSwitchProfile Profile{ .Id = Options.Id };
+        const auto AddType = [&](const OModReferenceOptions& AmmoReference, const std::optional<OModReferenceOptions>& OModReference,
+                                 std::string_view TypeWhere) -> bool
+        {
+            const auto Ammo = ParseAmmoReference(AmmoReference, std::format("{} ammo", TypeWhere));
+            if (!Ammo)
+                return false;
+
+            const RE::BGSMod::Attachment::Mod* OMod = nullptr;
+            if (OModReference)
+            {
+                OMod = ParseAmmoOModReference(*OModReference, std::format("{} omod", TypeWhere));
+                if (!OMod)
+                    return false;
+                if (OMod->targetFormType != RE::ENUM_FORM_ID::kWEAP)
+                {
+                    REX::WARN("  {}: OMOD {:08X} does not target a weapon", TypeWhere, OMod->GetFormID());
+                    return false;
+                }
+
+                const auto Index = OMod->attachPoint.keywordIndex;
+                auto* AttachPoint = RE::detail::BGSKeywordGetTypedKeywordByIndex(RE::KeywordType::kAttachPoint, Index);
+                if (!AttachPoint || (Profile.AttachPoint && Profile.AttachPoint != AttachPoint))
+                {
+                    REX::WARN("  {}: all OMODs in an ammo profile must share a valid attach point", TypeWhere);
+                    return false;
+                }
+                Profile.AttachPoint = AttachPoint;
+            }
+
+            if (std::ranges::any_of(Profile.Types, [Ammo](const auto& Type) { return Type.Ammo == Ammo; }))
+            {
+                REX::WARN("  {}: duplicate ammo form {:08X} in profile '{}'", TypeWhere, Ammo->GetFormID(), Options.Id);
+                return false;
+            }
+
+            Profile.Types.push_back({ .Ammo = Ammo, .OMod = OMod });
+            return true;
+        };
+
+        if (!AddType(Options.BaseAmmo, Options.BaseOMod, std::format("{} base", Where)))
+            return;
+        for (std::size_t i = 0; i < Options.AmmoTypes.size(); ++i)
+        {
+            const auto& Type = Options.AmmoTypes[i];
+            if (!AddType(Type.Ammo, Type.OMod, std::format("{} ammoTypes[{}]", Where, i)))
+                return;
+        }
+        if (Profile.Types.size() < 2 || !Profile.AttachPoint)
+        {
+            REX::WARN("  {}: profile '{}' needs at least two ammo types and one weapon OMOD", Where, Options.Id);
+            return;
+        }
+        if (std::ranges::any_of(Profile.Types.begin() + 1, Profile.Types.end(), [](const auto& Type) { return !Type.OMod; }))
+        {
+            REX::WARN("  {}: every alternate ammo type in profile '{}' needs an OMOD", Where, Options.Id);
+            return;
+        }
+
+        if (AmmoSwitchProfiles.contains(BaseAmmo))
+        {
+            REX::WARN("  {}: base ammo {:08X} is already defined; duplicate profile '{}' ignored", Where, BaseAmmo->GetFormID(), Options.Id);
+            return;
+        }
+        for (const auto& Type : Profile.Types)
+        {
+            if (AmmoSwitchLookups.contains(Type.Ammo))
+            {
+                REX::WARN("  {}: ammo {:08X} already belongs to another profile; profile '{}' ignored", Where,
+                    Type.Ammo->GetFormID(), Options.Id);
+                return;
+            }
+        }
+
+        const auto [It, Inserted] = AmmoSwitchProfiles.emplace(BaseAmmo, std::move(Profile));
+        if (!Inserted)
+            return;
+        for (std::size_t i = 0; i < It->second.Types.size(); ++i)
+            AmmoSwitchLookups.emplace(It->second.Types[i].Ammo, AmmoSwitchLookup{ .BaseAmmo = BaseAmmo, .TypeIndex = i });
+        REX::INFO("  {}: loaded ammo switch profile '{}' with {} type(s)", Where, It->second.Id, It->second.Types.size());
+    }
+
     void AddExclusion(const ExclusionEntry& Entry, std::string_view Where)
     {
         if (!HasOneForm(Entry, Where))
@@ -1486,6 +1638,8 @@ namespace
         }
 
         OModSwitchProfiles.clear();
+        AmmoSwitchProfiles.clear();
+        AmmoSwitchLookups.clear();
         for (const auto& [Name, Parsed] : ParsedFiles)
         {
             for (const auto& Profile : Parsed.Profiles)
@@ -1498,6 +1652,12 @@ namespace
                 if (!OModSwitchProfiles.emplace(Profile.Id, Profile).second)
                     REX::WARN("  {}: duplicate OMOD switch profile '{}' ignored", Name, Profile.Id);
             }
+        }
+
+        for (const auto& [Name, Parsed] : ParsedFiles)
+        {
+            for (std::size_t i = 0; i < Parsed.AmmoProfiles.size(); ++i)
+                AddAmmoSwitchProfile(Parsed.AmmoProfiles[i], std::format("{} ammoSwitchProfiles[{}]", Name, i));
         }
 
         for (const auto& [Name, Parsed] : ParsedFiles)
@@ -1827,6 +1987,8 @@ namespace WeaponConfig
         SlideLockRules.clear();
         FireModeRules.clear();
         OModSwitchRules.clear();
+        AmmoSwitchProfiles.clear();
+        AmmoSwitchLookups.clear();
         AimDownSightRules.clear();
         SlideRules.clear();
         FireLastRules.clear();
@@ -1960,6 +2122,22 @@ namespace WeaponConfig
     std::vector<OModSwitchGroup> MatchOModSwitchGroups(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
     {
         return OModSwitchRules.Match(Base, Instance).value_or(std::vector<OModSwitchGroup>{});
+    }
+
+    std::optional<AmmoSwitchMatch> MatchAmmoSwitch(const RE::TESAmmo* Ammo)
+    {
+        if (!Ammo)
+            return std::nullopt;
+
+        const auto Lookup = AmmoSwitchLookups.find(Ammo);
+        if (Lookup == AmmoSwitchLookups.end())
+            return std::nullopt;
+
+        const auto Profile = AmmoSwitchProfiles.find(Lookup->second.BaseAmmo);
+        if (Profile == AmmoSwitchProfiles.end() || Lookup->second.TypeIndex >= Profile->second.Types.size())
+            return std::nullopt;
+
+        return AmmoSwitchMatch{ .Profile = &Profile->second, .CurrentType = Lookup->second.TypeIndex };
     }
 
     std::vector<RE::BGSKeyword*> OModSwitchAttachPoints()

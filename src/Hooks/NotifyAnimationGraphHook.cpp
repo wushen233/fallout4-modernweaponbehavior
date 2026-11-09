@@ -63,14 +63,14 @@ namespace
             if (ArmAnimations::Refuse(*SentEvent))
                 return false;
 
+            if (const auto Accepted = FireMode::HandleWithoutAnimation(*SentEvent))
+                return *Accepted;
+
             if (FirstPerson::Refuse(*SentEvent))
                 return false;
 
             if (WeaponActions::Refuse(*SentEvent))
                 return false;
-
-            if (const auto Accepted = FireMode::HandleWithoutAnimation(*SentEvent))
-                return *Accepted;
 
             if (FireMode::Refuse(*SentEvent))
                 return false;

@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <RE/M/MeleeThrowHandler.h>
+#include <RE/P/PlayerControls.h>
+
 namespace Core
 {
     [[nodiscard]] inline RE::GUN_STATE GetGunState(const RE::Actor* Actor)
@@ -21,5 +24,20 @@ namespace Core
         constexpr std::int32_t GunStateMask = 0xF;
 
         return static_cast<RE::GUN_STATE>(std::to_underlying(Actor->gunState) & GunStateMask);
+    }
+
+    [[nodiscard]] inline bool IsThirdPersonReadyStance(const RE::PlayerCharacter* Player, RE::GUN_STATE State)
+    {
+        if (!Player->Is3rdPersonVisible() || !Player->GetWeaponMagicDrawn())
+            return false;
+        if (State == RE::GUN_STATE::kRelaxed)
+            return true;
+        if (State != RE::GUN_STATE::kThrowing)
+            return false;
+
+        // The third-person graph also reports state 5 when ready after ADS or fire.
+        const auto Controls = RE::PlayerControls::GetSingleton();
+        const auto Throw = Controls ? Controls->meleeThrowHandler : nullptr;
+        return Throw && !Throw->heldStateActive && !Throw->queueThrow;
     }
 }

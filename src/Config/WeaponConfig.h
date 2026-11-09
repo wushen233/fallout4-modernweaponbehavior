@@ -40,6 +40,25 @@ namespace WeaponConfig
         std::vector<const RE::BGSMod::Attachment::Mod*> OMods;
     };
 
+    struct AmmoSwitchType
+    {
+        const RE::TESAmmo* Ammo{ nullptr };
+        const RE::BGSMod::Attachment::Mod* OMod{ nullptr };
+    };
+
+    struct AmmoSwitchProfile
+    {
+        std::string Id;
+        RE::BGSKeyword* AttachPoint{ nullptr };
+        std::vector<AmmoSwitchType> Types;
+    };
+
+    struct AmmoSwitchMatch
+    {
+        const AmmoSwitchProfile* Profile{ nullptr };
+        std::size_t CurrentType{ 0 };
+    };
+
     enum class Feature
     {
         LoopedReload,
@@ -153,6 +172,7 @@ namespace WeaponConfig
     [[nodiscard]] std::optional<TacticalRule>  MatchTactical(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance);
     [[nodiscard]] std::optional<FireModeRule>  MatchFireMode(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance);
     [[nodiscard]] std::vector<OModSwitchGroup> MatchOModSwitchGroups(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance);
+    [[nodiscard]] std::optional<AmmoSwitchMatch> MatchAmmoSwitch(const RE::TESAmmo* Ammo);
     [[nodiscard]] std::vector<RE::BGSKeyword*> OModSwitchAttachPoints();
     [[nodiscard]] std::optional<SlideLockRule> MatchSlideLock(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance);
 

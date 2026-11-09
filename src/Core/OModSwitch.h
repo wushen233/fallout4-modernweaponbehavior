@@ -27,6 +27,9 @@ namespace OModSwitch
 {
     bool CycleEquippedOMod(WeaponConfig::OModCategory a_category);
     void Initialize();
+    void TraceAmmoAfterLoad();
+    void ResetPendingAmmoReload();
+    void TickPendingAmmoReload();
 
     bool SetItemOMod(
         std::monostate,

@@ -13,6 +13,7 @@
 */
 
 #include "UpdateAnimationHook.h"
+#include "Core/OModSwitch.h"
 #include "Magic/MagicAnnotations.h"
 #include "Arm/ArmSpace.h"
 #include "HUD/AmmoCheckDisplay.h"
@@ -53,6 +54,7 @@ namespace
             Original(This, Delta);
             Hooks::RefreshPlayerCharacters(This);
             Reload::Tick(Delta);
+            OModSwitch::TickPendingAmmoReload();
             Sprint::Tick(This, Delta);
             SprintCamera::Tick(This);
             BoltChargeResync::Tick(This);

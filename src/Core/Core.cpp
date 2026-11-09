@@ -138,6 +138,7 @@ namespace Core
 
     void PreLoadGame()
     {
+        OModSwitch::ResetPendingAmmoReload();
         Reload::Abort("loading a save");
         WeaponGraphSights::Reset();
         Hooks::ForgetClips();
@@ -163,6 +164,7 @@ namespace Core
 
     void PostLoadGame()
     {
+        OModSwitch::TraceAmmoAfterLoad();
         ScopeSway::DisableSeeThroughScopesHoldBreath();
         AmmoCheckDisplay::EnsureOpen();
         AimAfterLoad::Arm();

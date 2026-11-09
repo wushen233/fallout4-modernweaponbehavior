@@ -31,7 +31,7 @@ namespace FirstPerson
             Events.emplace_back(Name);
     }
 
-    std::optional<std::string> WeaponBusy(RE::PlayerCharacter* Player)
+    std::optional<std::string> WeaponBusy(RE::PlayerCharacter* Player, bool AllowThirdPersonReady)
     {
         if (!Core::GetEquippedWeapon(Player))
             return "no drawn weapon"s;
@@ -41,7 +41,9 @@ namespace FirstPerson
             case RE::GUN_STATE::kReloading:
                 return "reloading"s;
             case RE::GUN_STATE::kThrowing:
-                return "throwing"s;
+                if (!AllowThirdPersonReady || !Core::IsThirdPersonReadyStance(Player, RE::GUN_STATE::kThrowing))
+                    return "throwing"s;
+                break;
             case RE::GUN_STATE::kSighted:
             case RE::GUN_STATE::kFireSighted:
                 return "aiming"s;

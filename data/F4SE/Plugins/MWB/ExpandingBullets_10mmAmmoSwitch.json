@@ -1,0 +1,87 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.10mm",
+      "baseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0001F276"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x000189684"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00040920"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00040925"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00040921"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00044D79"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F95"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F96"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "Munitions - An Ammo Expansion.esl",
+            "formId": "0x000006EE"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0011A799"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00040923"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0011A79A"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0011A797"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0011A79B"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B90C"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B915"
+          }
+        }
+      ]
+    }
+  ]
+}

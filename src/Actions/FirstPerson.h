@@ -18,7 +18,7 @@ namespace FirstPerson
 {
     void Initialize();
 
-    [[nodiscard]] std::optional<std::string> WeaponBusy(RE::PlayerCharacter* Player);
+    [[nodiscard]] std::optional<std::string> WeaponBusy(RE::PlayerCharacter* Player, bool AllowThirdPersonReady = false);
 
     [[nodiscard]] bool Refuse(const RE::BSFixedString& Event);
 }

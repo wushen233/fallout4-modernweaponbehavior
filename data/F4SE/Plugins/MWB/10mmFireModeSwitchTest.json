@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "plugin": "Fallout4.esm",
+      "weapon": "0x00004822",
+      "fireModeSwitch": {
+        "automaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000801"
+        },
+        "semiAutomaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000802"
+        }
+      }
+    }
+  ]
+}

@@ -76,6 +76,7 @@ namespace
 
     bool SwitchAmmunitionOMod(GlobalFunctionSelf)
     {
+        REX::INFO("Papyrus: SwitchAmmunitionOMod invoked");
         return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
     }
 
