@@ -16,6 +16,7 @@
 #include "Actions/FirstPerson.h"
 #include "Config/WeaponConfig.h"
 #include "Core/EquippedWeapon.h"
+#include "Core/GunState.h"
 #include "Reload/SightedReload.h"
 #include "Settings/Settings.h"
 
@@ -23,9 +24,17 @@
 
 namespace
 {
+    constexpr std::string_view Plugin = "Modern Weapon Behavior.esp"sv;
+    constexpr std::uint32_t AttachPointID = 0x800;
+    constexpr std::uint32_t AutoModID = 0x801;
+    constexpr std::uint32_t SingleModID = 0x802;
+
     constexpr RE::TESFormID SoundAutoKeywordID = 0x0A191C;
     constexpr RE::TESFormID WeaponTypeAutomaticID = 0x04A0A2;
 
+    RE::BGSKeyword* AttachPoint{ nullptr };
+    RE::BGSMod::Attachment::Mod* AutoMod{ nullptr };
+    RE::BGSMod::Attachment::Mod* SingleMod{ nullptr };
     std::array<RE::BGSKeyword*, 2> ModeKeywords{};
 
     std::optional<RE::BSFixedString> StartEvent;
@@ -37,6 +46,18 @@ namespace
     std::atomic<bool> Requested{ false };
     std::atomic<bool> SwitchTaskQueued{ false };
     std::atomic<std::uint32_t> SwitchGeneration{ 0 };
+
+    using Clock = std::chrono::steady_clock;
+
+    constexpr auto InstantCooldown = std::chrono::milliseconds{ 500 };
+
+    std::mutex InstantLock;
+    Clock::time_point InstantReady{};
+
+    [[nodiscard]] bool Ready()
+    {
+        return AttachPoint && AutoMod && SingleMod;
+    }
 
     void AddAttachParent(RE::BGSAttachParentArray& Parents, RE::BGSKeyword* Keyword)
     {
@@ -110,7 +131,7 @@ namespace
 
         const auto ID = Weapon->Base->GetFormID();
 
-        if (!WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance))
+        if (!WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance) && !(Settings::FireModeEveryGun() && Ready()))
             return std::format("the weapon {:08X} has no \"fireModeSwitch\" in the JSON files", ID);
 
         if (IsCharging(*Weapon->Instance))
@@ -147,6 +168,52 @@ namespace
         }
 
         return {};
+    }
+
+    [[nodiscard]] std::optional<std::string> WhyNotInstant(RE::PlayerCharacter* Player, const Core::EquippedWeapon& Weapon)
+    {
+        const auto ID = Weapon.Base->GetFormID();
+
+        if (!Ready())
+            return "the feature is off"s;
+
+        if (WeaponConfig::Excluded(WeaponConfig::Feature::FireModeSwitch, Weapon.Base, Weapon.Instance))
+            return std::format("the weapon {:08X} is excluded (\"fireModeSwitch\" in MWB\\Exclusions)", ID);
+
+        if (Weapon.Base->weaponData.type.get() != RE::WEAPON_TYPE::kGun)
+            return std::format("the weapon {:08X} is not a gun", ID);
+
+        if (IsCharging(*Weapon.Instance))
+            return std::format("the weapon {:08X} charges its shots", ID);
+
+        switch (Core::GetGunState(Player))
+        {
+            case RE::GUN_STATE::kReloading:
+                return "reloading"s;
+            case RE::GUN_STATE::kThrowing:
+                return "throwing"s;
+            case RE::GUN_STATE::kFire:
+            case RE::GUN_STATE::kFireSighted:
+                return "firing"s;
+            default:
+                break;
+        }
+
+        if (Player->meleeAttackState != 0)
+            return "in a melee attack"s;
+
+        if (const auto List = Player->inventoryList)
+        {
+            const RE::BSAutoReadLock Lock{ List->rwLock };
+
+            if (const auto Stack = FindEquippedStack(*List, Weapon.Base).Stack; Stack && Stack->count > 1)
+                return std::format("{} identical copies of the weapon {:08X} share the stack", Stack->count, ID);
+        }
+
+        if (Clock::now() < InstantReady)
+            return "too soon after the last switch"s;
+
+        return std::nullopt;
     }
 
     void NotSwitched(std::string_view Reason)
@@ -190,7 +257,10 @@ namespace
             return;
         }
 
-        const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
+        auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
+        if (!Rule && Settings::FireModeEveryGun() && Ready())
+            Rule = WeaponConfig::FireModeRule{ AutoMod, SingleMod, AttachPoint };
+
         if (!Rule)
         {
             NotSwitched("the weapon has no valid fireModeSwitch configuration"sv);
@@ -322,6 +392,13 @@ namespace FireMode
         DoneEvent.emplace("MWB_SwitchFireModeDone");
         ExitEvent.emplace("MWB_SwitchFireModeExit");
 
+        const auto AttachPointForm = WeaponConfig::LookupPluginForm(Plugin, AttachPointID);
+        const auto AutoForm = WeaponConfig::LookupPluginForm(Plugin, AutoModID);
+        const auto SingleForm = WeaponConfig::LookupPluginForm(Plugin, SingleModID);
+        AttachPoint = AttachPointForm ? AttachPointForm->As<RE::BGSKeyword>() : nullptr;
+        AutoMod = AutoForm ? AutoForm->As<RE::BGSMod::Attachment::Mod>() : nullptr;
+        SingleMod = SingleForm ? SingleForm->As<RE::BGSMod::Attachment::Mod>() : nullptr;
+
         ModeKeywords = { RE::TESForm::GetFormByID<RE::BGSKeyword>(SoundAutoKeywordID),
             RE::TESForm::GetFormByID<RE::BGSKeyword>(WeaponTypeAutomaticID) };
 
@@ -334,11 +411,18 @@ namespace FireMode
         const auto DataHandler = RE::TESDataHandler::GetSingleton();
         std::uint32_t Added = 0;
         std::uint32_t Configured = 0;
+        std::uint32_t GenericAdded = 0;
 
         for (const auto Weapon : DataHandler->GetFormArray<RE::TESObjectWEAP>())
         {
             if (!Weapon)
                 continue;
+
+            if (Ready() && !Weapon->attachParents.HasKeyword(AttachPoint))
+            {
+                AddAttachParent(Weapon->attachParents, AttachPoint);
+                ++GenericAdded;
+            }
 
             const auto Rule = WeaponConfig::MatchFireMode(Weapon, nullptr);
             if (!Rule || !Rule->AttachPoint)
@@ -353,7 +437,11 @@ namespace FireMode
             }
         }
 
-        REX::INFO("Fire mode: configured OMOD attach points added to {} of {} matching weapons", Added, Configured);
+        REX::INFO("Fire mode: generic OMOD attach point added to {} weapons; configured attach points added to {} of {} matching weapons",
+            GenericAdded, Added, Configured);
+
+        if (!Ready())
+            REX::WARN("Fire mode: every-gun switching is unavailable; {} records are missing from {}", "ap_MWB_FireMode, mod_MWB_FireMode_Auto, mod_MWB_FireMode_Semi", Plugin);
     }
 
     bool Refuse(const RE::BSFixedString& Event)
@@ -398,6 +486,38 @@ namespace FireMode
 
         if (Settings::VerboseLog())
             REX::INFO("Fire mode: {} accepted without an animation ({})", Event.c_str(), ThirdPerson ? "third person" : "first person");
+
+        return true;
+    }
+
+    std::optional<bool> SwitchWithoutAnimation()
+    {
+        if (!Settings::FireModeSwitch() || !Settings::FireModeEveryGun())
+            return std::nullopt;
+
+        const auto Player = RE::PlayerCharacter::GetSingleton();
+        const auto Weapon = Player ? Core::GetEquippedWeapon(Player) : std::nullopt;
+
+        if (!Weapon || !Weapon->Base || !Weapon->Instance)
+            return std::nullopt;
+
+        if (WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance))
+            return std::nullopt;
+
+        const std::scoped_lock Lock{ InstantLock };
+
+        if (const auto Reason = WhyNotInstant(Player, *Weapon))
+        {
+            REX::INFO("Fire mode: no animation for {:08X}, not switched, {}", Weapon->Base->GetFormID(), *Reason);
+            return false;
+        }
+
+        InstantReady = Clock::now() + InstantCooldown;
+        Pending = false;
+        Requested = true;
+
+        if (Settings::VerboseLog())
+            REX::INFO("Fire mode: no animation for {:08X}, switching", Weapon->Base->GetFormID());
 
         return true;
     }
@@ -448,5 +568,8 @@ namespace FireMode
         Requested = false;
         SwitchGeneration.fetch_add(1);
         SwitchTaskQueued = false;
+
+        const std::scoped_lock Lock{ InstantLock };
+        InstantReady = {};
     }
 }

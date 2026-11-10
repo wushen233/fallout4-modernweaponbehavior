@@ -37,6 +37,7 @@ namespace Settings
     [[nodiscard]] bool FireModeSwitch();
 
     [[nodiscard]] bool FireModeSwitchAnimation();
+    [[nodiscard]] bool FireModeEveryGun();
 
     [[nodiscard]] bool WeaponHUD();
 

@@ -21,6 +21,7 @@ namespace FireMode
     [[nodiscard]] bool Refuse(const RE::BSFixedString& Event);
 
     [[nodiscard]] std::optional<bool> HandleWithoutAnimation(const RE::BSFixedString& Event);
+    [[nodiscard]] std::optional<bool> SwitchWithoutAnimation();
 
     void OnEventSent(const RE::BSFixedString& Event, bool Accepted);
 
