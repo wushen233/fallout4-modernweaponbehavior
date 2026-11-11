@@ -15,8 +15,10 @@
 #include "FireMode.h"
 #include "Actions/FirstPerson.h"
 #include "Config/WeaponConfig.h"
+#include "Core/Core.h"
 #include "Core/EquippedWeapon.h"
 #include "Core/GunState.h"
+#include "Hooks/ClipGeneratorHook.h"
 #include "Reload/SightedReload.h"
 #include "Settings/Settings.h"
 
@@ -131,7 +133,8 @@ namespace
 
         const auto ID = Weapon->Base->GetFormID();
 
-        if (!WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance) && !(Settings::FireModeEveryGun() && Ready()))
+        const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
+        if (!Rule && !(Settings::FireModeEveryGun() && Ready()))
             return std::format("the weapon {:08X} has no \"fireModeSwitch\" in the JSON files", ID);
 
         if (IsCharging(*Weapon->Instance))
@@ -144,8 +147,17 @@ namespace
         {
             const RE::BSAutoReadLock Lock{ List->rwLock };
 
-            if (const auto Stack = FindEquippedStack(*List, Weapon->Base).Stack; Stack && Stack->count > 1)
+            const auto Stack = FindEquippedStack(*List, Weapon->Base).Stack;
+            if (!Stack)
+                return std::format("the stack of the weapon {:08X} was not found", ID);
+            if (Stack->count > 1)
                 return std::format("{} identical copies of the weapon {:08X} share the stack", Stack->count, ID);
+            if (Rule && !Rule->RequiresAnyOMods.empty())
+            {
+                const auto Mods = Stack->extra ? Stack->extra->GetByType<RE::BGSObjectInstanceExtra>() : nullptr;
+                if (!Mods || !std::ranges::any_of(Rule->RequiresAnyOMods, [Mods](const auto* OMod) { return Mods->HasMod(*OMod); }))
+                    return std::format("the weapon {:08X} has none of the required receiver OMODs", ID);
+            }
         }
 
         return std::nullopt;
@@ -259,7 +271,7 @@ namespace
 
         auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
         if (!Rule && Settings::FireModeEveryGun() && Ready())
-            Rule = WeaponConfig::FireModeRule{ AutoMod, SingleMod, AttachPoint };
+            Rule = WeaponConfig::FireModeRule{ "everyGun", AutoMod, SingleMod, {}, AttachPoint };
 
         if (!Rule)
         {
@@ -286,6 +298,16 @@ namespace
             if (Stack->count > 1)
             {
                 NotSwitched(std::format("{} identical copies of the weapon {:08X} share the stack", Stack->count, Weapon->Base->GetFormID()));
+                return;
+            }
+
+            const auto ExistingMods = Stack->extra ? Stack->extra->GetByType<RE::BGSObjectInstanceExtra>() : nullptr;
+            if (!Rule->RequiresAnyOMods.empty() &&
+                (!ExistingMods || !std::ranges::any_of(Rule->RequiresAnyOMods, [ExistingMods](const auto* Required) {
+                    return ExistingMods->HasMod(*Required);
+                })))
+            {
+                NotSwitched(std::format("the weapon {:08X} has none of the required receiver OMODs", Weapon->Base->GetFormID()));
                 return;
             }
 
@@ -385,6 +407,14 @@ namespace
 
 namespace FireMode
 {
+    bool MatchesKeyID(RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance, std::string_view KeyID)
+    {
+        if (KeyID.empty())
+            return false;
+        const auto Rule = WeaponConfig::MatchFireMode(Base, Instance);
+        return Rule && Rule->KeyID == KeyID;
+    }
+
     void Initialize()
     {
         StartEvent.emplace("MWB_SwitchFireModeStart");
@@ -418,7 +448,8 @@ namespace FireMode
             if (!Weapon)
                 continue;
 
-            if (Ready() && !Weapon->attachParents.HasKeyword(AttachPoint))
+            if (Ready() && !Weapon->attachParents.HasKeyword(AttachPoint) &&
+                !Core::HasDefaultTemplateAttachPoint(Weapon, AttachPoint))
             {
                 AddAttachParent(Weapon->attachParents, AttachPoint);
                 ++GenericAdded;
@@ -430,10 +461,23 @@ namespace FireMode
 
             ++Configured;
 
-            if (!Weapon->attachParents.HasKeyword(Rule->AttachPoint))
+            if (!Weapon->attachParents.HasKeyword(Rule->AttachPoint) &&
+                !Core::HasDefaultTemplateAttachPoint(Weapon, Rule->AttachPoint))
             {
                 AddAttachParent(Weapon->attachParents, Rule->AttachPoint);
                 ++Added;
+            }
+
+            for (const auto* RequiredOMod : Rule->RequiresAnyOMods)
+            {
+                auto* RequiredAttachPoint = RE::detail::BGSKeywordGetTypedKeywordByIndex(
+                    RE::KeywordType::kAttachPoint, RequiredOMod->attachPoint.keywordIndex);
+                if (RequiredAttachPoint && !Weapon->attachParents.HasKeyword(RequiredAttachPoint) &&
+                    !Core::HasDefaultTemplateAttachPoint(Weapon, RequiredAttachPoint))
+                {
+                    AddAttachParent(Weapon->attachParents, RequiredAttachPoint);
+                    ++Added;
+                }
             }
         }
 
@@ -472,8 +516,24 @@ namespace FireMode
         const auto Rule = WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance);
 
         const bool ThirdPerson = Player->Is3rdPersonVisible();
-        if (!Rule || (!ThirdPerson && Settings::FireModeSwitchAnimation()))
+        if (!Rule)
             return std::nullopt;
+
+        if (!ThirdPerson)
+        {
+            const bool AutoDetected = !Rule->HasSwitchAnimation;
+            const bool HasSwitchAnimation = AutoDetected ? Hooks::HasFireModeSwitchAnimation(Player) : *Rule->HasSwitchAnimation;
+            if (AutoDetected && Settings::VerboseLog())
+                REX::INFO("Fire mode: switch animation auto-detection {}", HasSwitchAnimation ? "found a clip" : "found no clip");
+            if (HasSwitchAnimation)
+                return std::nullopt;
+        }
+
+        if (!ThirdPerson && !Settings::FireModeAnimationOptional())
+        {
+            REX::INFO("Fire mode: {} refused, no switch animation was found and animation-free switching is disabled", Event.c_str());
+            return false;
+        }
 
         if (const auto Reason = WhyNot(Player))
         {
@@ -522,16 +582,43 @@ namespace FireMode
         return true;
     }
 
-    void OnEventSent(const RE::BSFixedString& Event, bool Accepted)
+    bool OnEventSent(const RE::BSFixedString& Event, bool Accepted)
     {
         if (!StartEvent || Event != *StartEvent)
-            return;
+            return false;
 
         if (Accepted)
+        {
             Pending = true;
+            if (Settings::VerboseLog())
+                REX::INFO("Fire mode: {} accepted, waiting for the animation", Event.c_str());
+            return false;
+        }
+
+        Pending = false;
+
+        if (Settings::FireModeAnimationOptional())
+        {
+            const auto Player = RE::PlayerCharacter::GetSingleton();
+            const auto Weapon = Player ? Core::GetEquippedWeapon(Player) : std::nullopt;
+            if (Weapon && WeaponConfig::MatchFireMode(Weapon->Base, Weapon->Instance))
+            {
+                if (const auto Reason = WhyNot(Player))
+                    REX::INFO("Fire mode: animation unavailable, {} refused", *Reason);
+                else
+                {
+                    Requested = true;
+                    if (Settings::VerboseLog())
+                        REX::INFO("Fire mode: {} refused by the graph; applying the configured switch without an animation", Event.c_str());
+                    return true;
+                }
+            }
+        }
 
         if (Settings::VerboseLog())
-            REX::INFO("Fire mode: {} {}", Event.c_str(), Accepted ? "accepted, waiting for the clip" : "refused by the graph");
+            REX::INFO("Fire mode: {} refused by the graph", Event.c_str());
+
+        return false;
     }
 
     void OnAnimationEvent(const RE::BSFixedString& Tag)

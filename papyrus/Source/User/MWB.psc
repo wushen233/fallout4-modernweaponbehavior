@@ -48,3 +48,6 @@ Bool Function SwitchMuzzleOMod() global native
 Bool Function SwitchSightOMod() global native
 Bool Function SwitchAmmunitionOMod() global native
 Bool Function SwitchUnderbarrelOMod() global native
+
+; Runs the configured OMOD switch group, ammo profile or fire-mode rule assigned to this hotkey ID.
+Bool Function SwitchOModGroup(String keyID) global native

@@ -26,8 +26,12 @@ namespace RE::BSScript
 namespace OModSwitch
 {
     bool CycleEquippedOMod(WeaponConfig::OModCategory a_category);
+    bool CycleEquippedOMod(std::string_view a_keyID);
+    bool SwitchEquippedAmmoFromPipboy(RE::TESAmmo* a_targetAmmo);
+    void InstallPipboyAmmoMarkerSync();
     void Initialize();
     void TraceAmmoAfterLoad();
+    void ResetPendingSwitches();
     void ResetPendingAmmoReload();
     void TickPendingAmmoReload();
 

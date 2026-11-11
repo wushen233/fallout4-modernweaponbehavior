@@ -9,9 +9,11 @@
 */
 
 #include "OModSwitch.h"
+#include "Core/Core.h"
 #include "Core/EquippedWeapon.h"
 #include "Core/GunState.h"
 #include "Reload/SightedReload.h"
+#include "Settings/Settings.h"
 
 #include <F4SE/API.h>
 #include <RE/A/ActorEquipManager.h>
@@ -28,8 +30,11 @@
 #include <RE/E/ExtraInstanceData.h>
 #include <RE/M/MiddleHighProcessData.h>
 #include <RE/P/PipboyDataManager.h>
+#include <RE/P/PipboyArray.h>
+#include <RE/P/PipboyPrimitiveValue.h>
 #include <RE/P/PlayerCharacter.h>
 #include <RE/P/PlayerControls.h>
+#include <RE/U/UI.h>
 #include <RE/T/TESObjectREFR.h>
 #include <RE/T/TESObjectWEAP.h>
 
@@ -39,7 +44,7 @@ namespace OModSwitch
 {
     namespace
     {
-        struct NativeAmmoRuntime
+        struct NativeOModRuntime
         {
             REL::Version version;
             std::uintptr_t writerRva;
@@ -49,20 +54,21 @@ namespace OModSwitch
             std::array<std::uint8_t, 11> graphCallBytes;
         };
 
-        constexpr std::array NativeAmmoRuntimes{
-            NativeAmmoRuntime{ F4SE::RUNTIME_1_10_163, 0x1A84B0, 0x90, 0xE1BCD0, 0xE1F030,
+        constexpr std::array NativeOModRuntimes{
+            NativeOModRuntime{ F4SE::RUNTIME_1_10_163, 0x1A84B0, 0x90, 0xE1BCD0, 0xE1F030,
                 { 0x48, 0x8B, 0x4D, 0x6F, 0xB2, 0x01, 0xE8, 0xEB, 0xFA, 0xF5, 0xFF } },
-            NativeAmmoRuntime{ F4SE::RUNTIME_1_11_240, 0x34C400, 0x8B, 0xCE5E20, 0xCE85AB,
+            NativeOModRuntime{ F4SE::RUNTIME_1_11_240, 0x34C400, 0x8B, 0xCE5E20, 0xCE85AB,
                 { 0x48, 0x8B, 0x4D, 0x28, 0xB2, 0x01, 0xE8, 0x20, 0x01, 0xF8, 0xFF } },
         };
 
         using NativeStackWriter = bool(RE::BGSInventoryItem*, RE::BGSInventoryItem::StackDataCompareFunctor&,
             RE::BGSInventoryItem::StackDataWriteFunctor&, bool, std::uint32_t*);
-        bool useNativeAmmoSwitch = false;
+        bool nativeOModRefreshAvailable = false;
         REL::Relocation<NativeStackWriter> nativeStackWriter;
         REL::Relocation<void(RE::PipboyInventoryData*, RE::ENUM_FORM_ID)> queueAmmoCardRefresh;
         thread_local RE::Actor* skipEquipGraphFor = nullptr;
         REL::Relocation<void(RE::Actor*, bool)> originalEquipGraph;
+        std::atomic<std::uint64_t> switchGeneration{ 0 };
 
         using ReloadClock = std::chrono::steady_clock;
         constexpr auto ReloadRetryInterval = std::chrono::milliseconds{ 150 };
@@ -93,13 +99,13 @@ namespace OModSwitch
             originalEquipGraph(a_actor, a_updateWeaponState);
         }
 
-        void InitializeNativeAmmoSwitch()
+        void InitializeNativeOModRuntime()
         {
             const auto module = REX::FModule::GetExecutingModule();
             const auto version = module.GetFileVersion();
-            const auto runtime = std::ranges::find(NativeAmmoRuntimes, version, &NativeAmmoRuntime::version);
-            useNativeAmmoSwitch = runtime != NativeAmmoRuntimes.end();
-            if (!useNativeAmmoSwitch)
+            const auto runtime = std::ranges::find(NativeOModRuntimes, version, &NativeOModRuntime::version);
+            nativeOModRefreshAvailable = runtime != NativeOModRuntimes.end();
+            if (!nativeOModRefreshAvailable)
                 return;
 
             const auto base = module.GetBaseAddress();
@@ -115,13 +121,13 @@ namespace OModSwitch
                 std::memcmp(reinterpret_cast<const void*>(handleRead), handleLoad.data(), handleLoad.size()) != 0 ||
                 std::memcmp(reinterpret_cast<const void*>(handleRead + 11), handleCompare.data(), handleCompare.size()) != 0)
             {
-                REX::WARN("Ammo switch: native addresses did not match at equip graph RVA {:X}; native ammo switching unavailable",
+                REX::WARN("OMod switch: native addresses did not match at equip graph RVA {:X}; native equipped refresh unavailable",
                     runtime->graphCallRva);
                 return;
             }
             originalEquipGraph = REL::GetTrampoline().write_call<5>(site, UpdateEquipGraph);
             nativeStackWriter = writer;
-            REX::INFO("Ammo switch: native stack writer RVA {:X}, scoped equip graph hook RVA {:X} enabled",
+            REX::INFO("OMod switch: native stack writer RVA {:X}, scoped equip graph hook RVA {:X} enabled",
                 runtime->writerRva, runtime->graphCallRva);
 
             if (version == F4SE::RUNTIME_1_10_163)
@@ -491,10 +497,93 @@ namespace OModSwitch
             }
         }
 
+        bool UpdatePipboyAmmoEquipState(const RE::TESAmmo* a_equippedAmmo)
+        {
+            auto* pipboyData = RE::PipboyDataManager::GetSingleton();
+            auto* inventoryObject = pipboyData ? pipboyData->inventoryData.inventoryObject : nullptr;
+            auto* ammoArray = inventoryObject ? inventoryObject->GetMember<RE::PipboyArray*>("44") : nullptr;
+            if (!ammoArray)
+            {
+                REX::WARN("Ammo switch: Pip-Boy ammo list is unavailable for immediate equip marker update");
+                return false;
+            }
+
+            std::uint32_t cleared = 0;
+            bool targetFound = false;
+            const auto equippedFormID = a_equippedAmmo ? a_equippedAmmo->GetFormID() : 0;
+            for (auto* value : ammoArray->elements)
+            {
+                auto* item = value ? static_cast<RE::PipboyObject*>(value) : nullptr;
+                if (!item)
+                    continue;
+
+                auto* formID = item->GetMember<RE::PipboyPrimitiveValue<std::uint32_t>*>("formID");
+                auto* equipState = item->GetMember<RE::PipboyPrimitiveValue<std::uint32_t>*>("equipState");
+                if (!formID || !equipState)
+                    continue;
+
+                const bool isEquippedAmmo = equippedFormID != 0 && formID->m_value == equippedFormID;
+                targetFound = targetFound || isEquippedAmmo;
+                if (equipState->m_value != (isEquippedAmmo ? 1u : 0u))
+                {
+                    equipState->m_value = isEquippedAmmo ? 1u : 0u;
+                    equipState->m_isDirtyToCompanion = true;
+                    if (!isEquippedAmmo)
+                        ++cleared;
+                }
+            }
+
+            REX::INFO("Ammo switch: synchronized Pip-Boy equip marker (ammo={:08X}, targetFound={}, staleMarkersCleared={})",
+                equippedFormID, targetFound, cleared);
+            return targetFound;
+        }
+
+        void SyncPipboyAmmoMarkerFromEquippedWeapon()
+        {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            const auto weapon = Core::GetEquippedWeapon(player);
+            const RE::TESAmmo* ammo = weapon && weapon->Data ? weapon->Data->ammo : nullptr;
+            if (!ammo && weapon && weapon->Instance)
+                ammo = weapon->Instance->ammo;
+            if (!ammo && weapon && weapon->Base)
+                ammo = weapon->Base->weaponData.ammo;
+
+            if (ammo && !WeaponConfig::MatchAmmoSwitch(ammo))
+                ammo = nullptr;
+            UpdatePipboyAmmoEquipState(ammo);
+        }
+
+        class PipboyAmmoMarkerWatcher : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+        {
+        public:
+            RE::BSEventNotifyControl ProcessEvent(
+                const RE::MenuOpenCloseEvent& a_event,
+                RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+            {
+                if (!a_event.opening || a_event.menuName != "PipboyMenu"sv)
+                    return RE::BSEventNotifyControl::kContinue;
+
+                if (const auto* tasks = F4SE::GetTaskInterface())
+                    tasks->AddTask([]() { SyncPipboyAmmoMarkerFromEquippedWeapon(); });
+                return RE::BSEventNotifyControl::kContinue;
+            }
+        };
+
         bool StartAmmoReloadAction()
         {
             auto* controls = RE::PlayerControls::GetSingleton();
             return controls && controls->DoAction(RE::DEFAULT_OBJECT::kActionReload, RE::ActionInput::ACTIONPRIORITY::kTry);
+        }
+
+        bool ReloadWeaponImmediately(
+            RE::Actor* a_actor,
+            const RE::BGSObjectInstance& a_weapon,
+            std::uint32_t a_equipIndex)
+        {
+            constexpr std::size_t ReloadWeaponIndex = 0xEF;
+            using ReloadWeapon = bool (*)(RE::Actor*, const RE::BGSObjectInstance&, std::uint32_t);
+            const auto vtable = *reinterpret_cast<const ReloadWeapon* const*>(a_actor);
+            return vtable[ReloadWeaponIndex](a_actor, a_weapon, a_equipIndex);
         }
 
         void RetryAmmoReload(std::uint64_t a_generation)
@@ -555,9 +644,8 @@ namespace OModSwitch
         bool RequestAmmoReload(
             RE::PlayerCharacter* a_player,
             RE::TESObjectWEAP* a_expectedWeapon,
-            RE::TESAmmo* a_previousAmmo,
-            std::uint32_t a_previousLoaded,
-            RE::TESAmmo* a_targetAmmo)
+            RE::TESAmmo* a_targetAmmo,
+            bool a_playAnimation)
         {
             if (!a_player || !a_expectedWeapon || !a_targetAmmo)
                 return false;
@@ -585,17 +673,27 @@ namespace OModSwitch
                 return false;
             }
 
-            const auto previousAmmo = a_previousAmmo ? a_previousAmmo : weapon->Data->ammo;
-            if (a_previousLoaded > 0 && previousAmmo)
-            {
-                a_player->AddObjectToContainer(previousAmmo, {}, static_cast<std::int32_t>(a_previousLoaded), nullptr,
-                    RE::ITEM_REMOVE_REASON::kNone);
-            }
-
             // Start with an empty magazine for the new ammo, even if the native
-            // equip populated an initial count.
+            // equip populated an initial count. Do not manually credit the old
+            // magazine to inventory: the engine's OMOD/equip refresh already
+            // accounts for it, and adding it here duplicates those rounds.
             weapon->Data->ammo = a_targetAmmo;
             weapon->Data->ammoCount = 0;
+
+            if (!a_playAnimation)
+            {
+                if (!weapon->Item)
+                {
+                    REX::WARN("Ammo switch: cannot instant-reload Pip-Boy selection; equipped inventory item is unavailable");
+                    return false;
+                }
+                const bool reloaded = ReloadWeaponImmediately(
+                    a_player, weapon->Item->item, weapon->Item->equipIndex.index);
+                REX::INFO("Ammo switch: Pip-Boy instant reload for {:08X} returned {}",
+                    a_expectedWeapon->GetFormID(), reloaded);
+                QueueWeaponCardRefresh();
+                return reloaded;
+            }
 
             QueueWeaponCardRefresh();
 
@@ -604,10 +702,8 @@ namespace OModSwitch
             const auto equippedInstance = weapon->Item ? weapon->Item->item.instanceData : RE::BSTSmartPointer<RE::TBO_InstanceData>{};
             if (StartAmmoReloadAction())
             {
-                REX::INFO(
-                    "Ammo switch: game accepted reload action for {:08X} with ammo {:08X}; returned {} loaded round(s) of {:08X}",
-                    a_expectedWeapon->GetFormID(), a_targetAmmo->GetFormID(), a_previousLoaded,
-                    previousAmmo ? previousAmmo->GetFormID() : 0u);
+                REX::INFO("Ammo switch: game accepted reload action for {:08X} with ammo {:08X}",
+                    a_expectedWeapon->GetFormID(), a_targetAmmo->GetFormID());
                 return true;
             }
 
@@ -617,8 +713,8 @@ namespace OModSwitch
                 const std::scoped_lock lock{ pendingReloadLock };
                 pendingReload = PendingAmmoReload{ ++reloadGeneration, a_expectedWeapon, equippedInstance, a_targetAmmo,
                     now + ReloadRetryWindow, now + ReloadRetryInterval };
-                REX::INFO("Ammo switch: reload action not accepted yet; queued retry with ammo {:08X}; returned {} loaded round(s)",
-                    a_targetAmmo->GetFormID(), previousAmmo ? a_previousLoaded : 0u);
+                REX::INFO("Ammo switch: reload action not accepted yet; queued retry with ammo {:08X}",
+                    a_targetAmmo->GetFormID());
                 return true;
             }
 
@@ -635,23 +731,26 @@ namespace OModSwitch
             RE::BGSMod::Attachment::Mod* a_toOMod,
             RE::TESAmmo* a_targetAmmo = nullptr);
 
-        void CycleAmmoOnGameThread(
+        bool SwitchAmmoOnGameThread(
             RE::PlayerCharacter* a_player,
             const Core::EquippedWeapon& a_weapon,
-            const WeaponConfig::AmmoSwitchMatch& a_match)
+            const WeaponConfig::AmmoSwitchMatch& a_match,
+            std::optional<std::size_t> a_targetType = std::nullopt,
+            bool a_pipboyReloadAnimation = true)
         {
             const auto* profile = a_match.Profile;
             if (!a_player || !profile || !profile->AttachPoint || a_match.CurrentType >= profile->Types.size())
-                return;
-            if (useNativeAmmoSwitch && !nativeStackWriter.address())
-                return;
-            if (useNativeAmmoSwitch && Core::GetGunState(a_player) == RE::GUN_STATE::kReloading)
+                return false;
+            if (nativeOModRefreshAvailable && !nativeStackWriter.address())
+                return false;
+            if (nativeOModRefreshAvailable && Core::GetGunState(a_player) == RE::GUN_STATE::kReloading)
             {
                 REX::INFO("Ammo switch: finish the current reload before switching again");
-                return;
+                return false;
             }
 
-            if (!a_weapon.Base->attachParents.HasKeyword(profile->AttachPoint))
+            if (!a_weapon.Base->attachParents.HasKeyword(profile->AttachPoint) &&
+                !Core::HasDefaultTemplateAttachPoint(a_weapon.Base, profile->AttachPoint))
                 AddAttachParent(a_weapon.Base->attachParents, profile->AttachPoint);
 
             auto* item = FindInventoryItem(a_player, a_weapon.Base);
@@ -659,7 +758,7 @@ namespace OModSwitch
             if (!item || stackID < 0)
             {
                 REX::WARN("Ammo switch: equipped weapon stack could not be resolved");
-                return;
+                return false;
             }
 
             const auto stackIndex = static_cast<std::uint32_t>(stackID);
@@ -667,16 +766,15 @@ namespace OModSwitch
             if (!stack || !stack->extra || stack->count > 1)
             {
                 REX::WARN("Ammo switch: equipped weapon stack is missing instance data or shares {} copies", stack ? stack->count : 0);
-                return;
+                return false;
             }
 
             auto currentTypeIndex = a_match.CurrentType;
-            const auto previousLoaded = a_weapon.Data ? a_weapon.Data->ammoCount : 0;
             RE::BGSMod::Attachment::Mod* installed = nullptr;
             const auto dataHandler = RE::TESDataHandler::GetSingleton();
             const auto attachIndex = RE::BGSKeyword::GetIndexForTypedKeyword(profile->AttachPoint, RE::KeywordType::kAttachPoint);
             if (!dataHandler)
-                return;
+                return false;
             for (auto* mod : dataHandler->GetFormArray<RE::BGSMod::Attachment::Mod>())
             {
                 if (!mod || mod->attachPoint.keywordIndex != attachIndex || !StackHasOMod(item, stackIndex, mod))
@@ -684,7 +782,7 @@ namespace OModSwitch
                 if (installed)
                 {
                     REX::WARN("Ammo switch: multiple installed OMODs use attach point {:04X}; refusing to guess", attachIndex);
-                    return;
+                    return false;
                 }
                 installed = mod;
             }
@@ -723,28 +821,46 @@ namespace OModSwitch
             if (installed != currentType->OMod && !implicitBaseAmmo)
             {
                 REX::WARN("Ammo switch: current ammo {:08X} does not match its configured OMOD state", currentType->Ammo->GetFormID());
-                return;
+                return false;
             }
 
             std::size_t nextIndex = profile->Types.size();
             std::uint32_t ownedTargetAmmo = 0;
-            for (std::size_t offset = 1; offset < profile->Types.size(); ++offset)
+            if (a_targetType)
             {
-                const auto candidateIndex = (currentTypeIndex + offset) % profile->Types.size();
-                std::uint32_t candidateCount = 0;
-                a_player->GetItemCount(candidateCount, const_cast<RE::TESAmmo*>(profile->Types[candidateIndex].Ammo), false);
-                if (candidateCount > 0)
+                if (*a_targetType >= profile->Types.size())
+                    return false;
+                nextIndex = *a_targetType;
+                a_player->GetItemCount(ownedTargetAmmo, const_cast<RE::TESAmmo*>(profile->Types[nextIndex].Ammo), false);
+                if (ownedTargetAmmo == 0)
                 {
-                    nextIndex = candidateIndex;
-                    ownedTargetAmmo = candidateCount;
-                    break;
+                    REX::INFO("Ammo switch: clicked ammo {:08X} is not in the player's inventory",
+                        profile->Types[nextIndex].Ammo->GetFormID());
+                    return false;
+                }
+            }
+            else
+            {
+                for (std::size_t offset = 1; offset < profile->Types.size(); ++offset)
+                {
+                    const auto candidateIndex = (currentTypeIndex + offset) % profile->Types.size();
+                    std::uint32_t candidateCount = 0;
+                    a_player->GetItemCount(candidateCount, const_cast<RE::TESAmmo*>(profile->Types[candidateIndex].Ammo), false);
+                    if (candidateCount > 0)
+                    {
+                        nextIndex = candidateIndex;
+                        ownedTargetAmmo = candidateCount;
+                        break;
+                    }
                 }
             }
             if (nextIndex == profile->Types.size())
             {
                 REX::WARN("Ammo switch: no other profile ammo is available in the player's inventory");
-                return;
+                return false;
             }
+            if (nextIndex == currentTypeIndex)
+                return true;
             const auto& nextType = profile->Types[nextIndex];
             REX::INFO("Ammo switch: selected available type {:08X} ({}) after scanning profile",
                 nextType.Ammo->GetFormID(), ownedTargetAmmo);
@@ -762,17 +878,18 @@ namespace OModSwitch
             {
                 REX::INFO("Ammo switch: profile '{}' changed ammo {:08X} -> {:08X}", profile->Id,
                     currentType->Ammo->GetFormID(), nextType.Ammo->GetFormID());
-                RequestAmmoReload(a_player, a_weapon.Base, const_cast<RE::TESAmmo*>(currentType->Ammo), previousLoaded,
-                    const_cast<RE::TESAmmo*>(nextType.Ammo));
+                RequestAmmoReload(
+                    a_player, a_weapon.Base, const_cast<RE::TESAmmo*>(nextType.Ammo), a_pipboyReloadAnimation);
             }
             else
             {
                 REX::WARN("Ammo switch: profile '{}' failed to apply OMOD transition for {:08X} -> {:08X}", profile->Id,
                     currentType->Ammo->GetFormID(), nextType.Ammo->GetFormID());
             }
+            return changed;
         }
 
-        void CycleOnGameThread(WeaponConfig::OModCategory a_category)
+        void CycleOnGameThread(std::optional<WeaponConfig::OModCategory> a_category, std::string_view a_keyID = {})
         {
             if (a_category == WeaponConfig::OModCategory::Ammunition)
                 REX::INFO("Ammo switch: hotkey task callback started");
@@ -786,31 +903,41 @@ namespace OModSwitch
             }
 
             const auto groups = WeaponConfig::MatchOModSwitchGroups(weapon->Base, weapon->Instance);
-            if (a_category == WeaponConfig::OModCategory::Ammunition)
+            if (a_category == WeaponConfig::OModCategory::Ammunition || !a_keyID.empty())
             {
                 const auto* currentAmmo = weapon->Instance->ammo ? weapon->Instance->ammo : weapon->Base->weaponData.ammo;
-                REX::INFO("Ammo switch: equipped weapon {:08X}, current ammo {:08X}",
-                    weapon->Base->GetFormID(), currentAmmo ? currentAmmo->GetFormID() : 0);
+                if (a_category == WeaponConfig::OModCategory::Ammunition)
+                    REX::INFO("Ammo switch: equipped weapon {:08X}, current ammo {:08X}",
+                        weapon->Base->GetFormID(), currentAmmo ? currentAmmo->GetFormID() : 0);
                 if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo))
                 {
-                    if (std::ranges::any_of(groups, [](const auto& group) { return group.Category == WeaponConfig::OModCategory::Ammunition; }))
+                    const bool requestedAmmoProfile = a_category == WeaponConfig::OModCategory::Ammunition ||
+                        (!a_keyID.empty() && ammoMatch->Profile->KeyID == a_keyID);
+                    const bool conflictingGroup = requestedAmmoProfile && std::ranges::any_of(groups, [&](const auto& group) {
+                        return a_keyID.empty() ? group.Category == WeaponConfig::OModCategory::Ammunition : group.KeyID == a_keyID;
+                    });
+                    if (conflictingGroup)
                     {
-                        REX::WARN("Ammo switch: weapon {:08X} has both an ammo profile and an ammunition OMOD group; refusing ambiguous hotkey",
+                        REX::WARN("Ammo switch: weapon {:08X} has an ammo profile and an OMOD group assigned to the requested hotkey; refusing ambiguous hotkey",
                             weapon->Base->GetFormID());
                         return;
                     }
-                    CycleAmmoOnGameThread(player, *weapon, *ammoMatch);
-                    return;
+                    if (requestedAmmoProfile)
+                    {
+                        SwitchAmmoOnGameThread(player, *weapon, *ammoMatch);
+                        return;
+                    }
                 }
             }
             const WeaponConfig::OModSwitchGroup* selected = nullptr;
             for (const auto& group : groups)
             {
-                if (group.Category != a_category)
+                if ((!a_keyID.empty() && group.KeyID != a_keyID) ||
+                    (a_keyID.empty() && (!a_category || group.Category != *a_category)))
                     continue;
                 if (selected)
                 {
-                    REX::WARN("OMod switch: more than one configured group uses the requested category");
+                    REX::WARN("OMod switch: more than one configured group matches the requested category or keyID");
                     return;
                 }
                 selected = &group;
@@ -821,9 +948,8 @@ namespace OModSwitch
                 return;
             }
 
-            const bool nativeAttachment = useNativeAmmoSwitch &&
-                (a_category == WeaponConfig::OModCategory::Muzzle || a_category == WeaponConfig::OModCategory::Sight);
-            if (nativeAttachment)
+            const bool refreshEquipped = nativeOModRefreshAvailable && selected->RefreshEquipped;
+            if (refreshEquipped)
             {
                 const auto gunState = Core::GetGunState(player);
                 const bool thirdPerson = player->Is3rdPersonVisible();
@@ -838,7 +964,8 @@ namespace OModSwitch
                 }
             }
 
-            if (selected->AttachPoint && !weapon->Base->attachParents.HasKeyword(selected->AttachPoint))
+            if (selected->AttachPoint && !weapon->Base->attachParents.HasKeyword(selected->AttachPoint) &&
+                !Core::HasDefaultTemplateAttachPoint(weapon->Base, selected->AttachPoint))
                 AddAttachParent(weapon->Base->attachParents, selected->AttachPoint);
 
             auto candidates = Candidates(*selected);
@@ -902,7 +1029,7 @@ namespace OModSwitch
                 REX::INFO("OMod switch: group '{}' has only one active candidate", selected->Id);
                 return;
             }
-            if (nativeAttachment)
+            if (refreshEquipped)
             {
                 if (ApplyEquippedOModTransition(player, weapon->Base, stackID, current, next))
                 {
@@ -961,6 +1088,16 @@ namespace OModSwitch
                     actor != nullptr,
                     middleHigh != nullptr,
                     instanceData != nullptr);
+                return false;
+            }
+
+            // Persist before replacing the live equipped pointer. If this fails,
+            // the caller can restore the stack while the old instance is still equipped.
+            const bool stackInstanceStored = StoreStackInstanceData(a_owner, a_item, a_stackIndex, instanceData);
+            if (!stackInstanceStored)
+            {
+                REX::ERROR("Equipped OMOD refresh could not persist instance data for item {:08X}, stack={}",
+                    a_item->object->GetFormID(), a_stackIndex);
                 return false;
             }
 
@@ -1035,7 +1172,6 @@ namespace OModSwitch
                 }
             }
 
-            const bool stackInstanceStored = StoreStackInstanceData(a_owner, a_item, a_stackIndex, instanceData);
             auto* fireNodeAfter = equippedWeaponData ? equippedWeaponData->fireNode : nullptr;
             const auto fireLocationCountAfter = equippedWeaponData ? equippedWeaponData->fireLocations.size() : 0;
 
@@ -1051,10 +1187,6 @@ namespace OModSwitch
                 static_cast<void*>(fireNodeAfter),
                 fireLocationCount,
                 fireLocationCountAfter);
-            // The equipped instance and biped refresh can succeed even when the
-            // inventory-list accessor does not resolve the stored wrapper identically.
-            // Do not roll back a live OMOD change solely because that persistence probe
-            // disagrees; report it for diagnosis and preserve the working reload path.
             return true;
         }
 
@@ -1171,7 +1303,7 @@ namespace OModSwitch
                 (a_fromOMod && a_toOMod && !HasSameAttachPoint(a_fromOMod, a_toOMod)))
                 return false;
 
-            if (useNativeAmmoSwitch)
+            if (nativeOModRefreshAvailable)
             {
                 auto* manager = RE::ActorEquipManager::GetSingleton();
                 if (!nativeStackWriter.address() || !manager)
@@ -1263,8 +1395,9 @@ namespace OModSwitch
                     const bool skipped = skipEquipGraphFor == nullptr;
                     skipEquipGraphFor = nullptr;
                     const auto live = Core::GetEquippedWeapon(a_owner);
-                    const bool matches = live && live->Base == a_itemForm && live->Item &&
-                        live->Item->item.instanceData && live->Instance->ammo == a_expectedAmmo &&
+                    const bool matches = equipped && live && live->Base == a_itemForm && live->Item &&
+                        live->Item->item.instanceData && live->Item->item.instanceData.get() == instance &&
+                        live->Instance->ammo == a_expectedAmmo &&
                         (!preserveMagazine || (live->Data && live->Instance->ammoCapacity == originalCapacity));
                     REX::INFO("OMod switch: native equip returned {}, graphSkipped={}, equippedAmmoMatches={}",
                         equipped, skipped, matches);
@@ -1338,9 +1471,55 @@ namespace OModSwitch
         tasks->AddTask([generation]() { RetryAmmoReload(generation); });
     }
 
+    bool SwitchEquippedAmmoFromPipboy(RE::TESAmmo* a_targetAmmo)
+    {
+        if (!a_targetAmmo)
+            return false;
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        const auto weapon = Core::GetEquippedWeapon(player);
+        if (!player || !weapon)
+            return false;
+
+        if (!weapon->Base || !weapon->Instance)
+            return false;
+        const auto* currentAmmo = weapon->Instance->ammo ? weapon->Instance->ammo : weapon->Base->weaponData.ammo;
+        const auto currentMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo);
+        const auto targetMatch = WeaponConfig::MatchAmmoSwitch(a_targetAmmo);
+        if (!currentMatch || !targetMatch || currentMatch->Profile != targetMatch->Profile)
+        {
+            REX::INFO("Ammo switch: Pip-Boy ammo {:08X} is not compatible with equipped weapon {:08X}; keeping vanilla cannot-equip response",
+                a_targetAmmo->GetFormID(), weapon->Base->GetFormID());
+            return false;
+        }
+
+        REX::INFO("Ammo switch: Pip-Boy selected {:08X} for weapon {:08X}",
+            a_targetAmmo->GetFormID(), weapon->Base->GetFormID());
+        const auto* previousAmmo = currentAmmo;
+        const bool switched = SwitchAmmoOnGameThread(
+            player, *weapon, *currentMatch, targetMatch->CurrentType, Settings::PipboyAmmoReloadAnimation());
+        if (switched)
+            UpdatePipboyAmmoEquipState(a_targetAmmo);
+        if (switched && previousAmmo != a_targetAmmo)
+        {
+            player->PlayPickUpSound(a_targetAmmo, true, false);
+        }
+        return switched;
+    }
+
+    void InstallPipboyAmmoMarkerSync()
+    {
+        static PipboyAmmoMarkerWatcher watcher;
+        if (auto* ui = RE::UI::GetSingleton())
+        {
+            ui->RegisterSink<RE::MenuOpenCloseEvent>(&watcher);
+            REX::INFO("Ammo switch: Pip-Boy equipped-ammo marker sync registered");
+        }
+    }
+
     void Initialize()
     {
-        InitializeNativeAmmoSwitch();
+        InitializeNativeOModRuntime();
         const auto dataHandler = RE::TESDataHandler::GetSingleton();
         if (!dataHandler)
             return;
@@ -1355,7 +1534,8 @@ namespace OModSwitch
             if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(weapon->weaponData.ammo))
             {
                 auto* attachPoint = ammoMatch->Profile->AttachPoint;
-                if (attachPoint && !weapon->attachParents.HasKeyword(attachPoint))
+                if (attachPoint && !weapon->attachParents.HasKeyword(attachPoint) &&
+                    !Core::HasDefaultTemplateAttachPoint(weapon, attachPoint))
                 {
                     AddAttachParent(weapon->attachParents, attachPoint);
                     ++ammoAdded;
@@ -1364,7 +1544,8 @@ namespace OModSwitch
             for (const auto& group : WeaponConfig::MatchOModSwitchGroups(weapon, nullptr))
             {
                 auto* attachPoint = group.AttachPoint;
-                if (attachPoint && !weapon->attachParents.HasKeyword(attachPoint))
+                if (attachPoint && !weapon->attachParents.HasKeyword(attachPoint) &&
+                    !Core::HasDefaultTemplateAttachPoint(weapon, attachPoint))
                 {
                     AddAttachParent(weapon->attachParents, attachPoint);
                     ++added;
@@ -1391,6 +1572,11 @@ namespace OModSwitch
             cachedAmmo ? cachedAmmo->GetFormID() : 0u, weapon->Data->ammoCount);
     }
 
+    void ResetPendingSwitches()
+    {
+        switchGeneration.fetch_add(1);
+    }
+
     bool CycleEquippedOMod(WeaponConfig::OModCategory a_category)
     {
         const auto tasks = F4SE::GetTaskInterface();
@@ -1400,7 +1586,35 @@ namespace OModSwitch
                 REX::WARN("Ammo switch: Papyrus hotkey reached MWB, but the F4SE task interface is unavailable");
             return false;
         }
-        tasks->AddTask([a_category]() { CycleOnGameThread(a_category); });
+        const auto generation = switchGeneration.load();
+        tasks->AddTask([a_category, generation]() {
+            if (generation != switchGeneration.load())
+            {
+                REX::INFO("OMod switch: cancelled queued hotkey during save load");
+                return;
+            }
+            CycleOnGameThread(a_category);
+        });
+        return true;
+    }
+
+    bool CycleEquippedOMod(std::string_view a_keyID)
+    {
+        if (a_keyID.empty())
+            return false;
+        const auto tasks = F4SE::GetTaskInterface();
+        if (!tasks)
+            return false;
+        const auto keyID = std::string{ a_keyID };
+        const auto generation = switchGeneration.load();
+        tasks->AddTask([keyID, generation]() {
+            if (generation != switchGeneration.load())
+            {
+                REX::INFO("OMod switch: cancelled queued hotkey during save load");
+                return;
+            }
+            CycleOnGameThread(std::nullopt, keyID);
+        });
         return true;
     }
 

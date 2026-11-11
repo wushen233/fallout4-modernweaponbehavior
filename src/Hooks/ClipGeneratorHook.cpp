@@ -19,6 +19,8 @@
 #include "Settings/Settings.h"
 #include "Sprint/TacticalSprint.h"
 
+#include <RE/B/BSResourceNiBinaryStream.h>
+
 namespace
 {
     constexpr std::size_t ActivateSlot = 0x7;
@@ -219,6 +221,56 @@ namespace
         const auto Graph = Manager->graph[Manager->activeGraph].get();
 
         return Graph ? reinterpret_cast<const std::byte*>(Graph) + GraphCharacterOffset : nullptr;
+    }
+
+    [[nodiscard]] const char* WeaponAnimationPath(const void* Graph)
+    {
+        if (!Graph)
+            return nullptr;
+
+        const auto Character = reinterpret_cast<const std::byte*>(Graph) + GraphCharacterOffset;
+        const auto Project = Read<const void*>(Character, 0x88);
+        const auto Strings = Project ? Read<const void*>(Project, 0x20) : nullptr;
+        const auto Path = Strings ? Read<const char*>(Strings, 0x50) : nullptr;
+
+        return Path && *Path ? Path : nullptr;
+    }
+
+    [[nodiscard]] bool ResourceExists(std::string_view Path)
+    {
+        std::string NullTerminated{ Path };
+        RE::BSResourceNiBinaryStream Stream{ NullTerminated.c_str() };
+        return static_cast<bool>(Stream);
+    }
+
+    [[nodiscard]] bool HasSwitchClipAt(const char* AnimationPath)
+    {
+        if (!AnimationPath || !*AnimationPath)
+            return false;
+
+        std::string Directory{ AnimationPath };
+        std::ranges::replace(Directory, '/', '\\');
+        while (!Directory.empty() && Directory.back() == '\\')
+            Directory.pop_back();
+
+        std::string ResourcePath;
+        constexpr std::string_view MeshRoot = "meshes\\actors\\character\\"sv;
+        constexpr std::string_view AnimRoot = "animations\\"sv;
+        constexpr std::string_view ActorRoot = "actors\\character\\"sv;
+        std::string Lower = Directory;
+        std::ranges::transform(Lower, Lower.begin(), [](unsigned char Character) { return static_cast<char>(std::tolower(Character)); });
+
+        if (Lower.starts_with(MeshRoot))
+            ResourcePath = Directory;
+        else if (Lower.starts_with(ActorRoot))
+            ResourcePath = "Meshes\\" + Directory;
+        else if (Lower.starts_with(AnimRoot))
+            ResourcePath = "Meshes\\Actors\\Character\\" + Directory;
+        else
+            ResourcePath = "Meshes\\Actors\\Character\\Animations\\" + Directory;
+
+        ResourcePath += "\\WPNSwitchFireMode.hkx";
+        return ResourceExists(ResourcePath);
     }
 
     [[nodiscard]] std::optional<std::size_t> LastCrossed(const std::vector<ReloadMark>& Marks, float Local, ReloadMarkKind Kind)
@@ -513,6 +565,24 @@ namespace
 
 namespace Hooks
 {
+    bool HasFireModeSwitchAnimation(RE::Actor* Actor)
+    {
+        RE::BSTSmartPointer<RE::BSAnimationGraphManager> Manager;
+
+        if (!Actor || !Actor->GetAnimationGraphManagerImpl(Manager) || !Manager)
+            return false;
+
+        // Graph zero is the body graph; weapon animation graphs follow it.
+        for (std::uint32_t Index = 1; Index < Manager->graph.size(); ++Index)
+        {
+            const auto* Graph = Manager->graph[Index].get();
+            if (HasSwitchClipAt(WeaponAnimationPath(Graph)))
+                return true;
+        }
+
+        return false;
+    }
+
     void InstallClipGeneratorHook()
     {
         REL::Relocation<std::uintptr_t> Vtable{ RE::VTABLE::hkbClipGenerator[0] };

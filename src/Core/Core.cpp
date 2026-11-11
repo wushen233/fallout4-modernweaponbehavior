@@ -30,6 +30,7 @@
 #include "Hooks/IdleStartHook.h"
 #include "Hooks/InputHandler.h"
 #include "Hooks/NotifyAnimationGraphHook.h"
+#include "Hooks/PipboyAmmoHook.h"
 #include "Hooks/QueuedEventHook.h"
 #include "Hooks/SubgraphAnimationHook.h"
 #include "Hooks/UpdateAnimationHook.h"
@@ -58,6 +59,10 @@
 #include "Weapon/WeaponGraphSights.h"
 #include "Weapon/WeaponBones.h"
 
+#include <RE/B/BGSMod.h>
+#include <RE/B/BGSKeyword.h>
+#include <RE/T/TESObjectWEAP.h>
+
 namespace
 {
     constexpr std::array KnownRuntimes
@@ -76,6 +81,36 @@ namespace
 
 namespace Core
 {
+    bool HasDefaultTemplateAttachPoint(RE::TESObjectWEAP* a_weapon, RE::BGSKeyword* a_attachPoint)
+    {
+        if (!a_weapon || !a_attachPoint)
+            return false;
+
+        const auto* objectTemplate = a_weapon->GetObjectTemplate();
+        if (!objectTemplate)
+            return false;
+
+        const auto attachPointIndex = RE::BGSKeyword::GetIndexForTypedKeyword(
+            a_attachPoint, RE::KeywordType::kAttachPoint);
+        for (const auto* item : objectTemplate->items)
+        {
+            if (!item || !item->isDefault)
+                continue;
+
+            RE::BGSMod::Container::Data data{};
+            item->GetData(&data);
+            if (!data.attachments)
+                continue;
+            for (std::uint32_t i = 0; i < data.attachmentCount; ++i)
+            {
+                const auto* mod = data.attachments[i].mod;
+                if (mod && mod->attachPoint.keywordIndex == attachPointIndex)
+                    return true;
+            }
+        }
+        return false;
+    }
+
     bool RuntimeSupported()
     {
         const auto GameVersion = REX::FModule::GetExecutingModule().GetFileVersion();
@@ -111,6 +146,8 @@ namespace Core
         AmmoCheckDisplay::Initialize();
         FireMode::Initialize();
         OModSwitch::Initialize();
+        OModSwitch::InstallPipboyAmmoMarkerSync();
+        PipboyAmmoHook::Initialize();
         Hooks::InstallAnimationEventHook();
         Hooks::InstallActorAnimationEventHook();
         Hooks::InstallGraphManagerEventHook();
@@ -138,6 +175,7 @@ namespace Core
 
     void PreLoadGame()
     {
+        OModSwitch::ResetPendingSwitches();
         OModSwitch::ResetPendingAmmoReload();
         Reload::Abort("loading a save");
         WeaponGraphSights::Reset();

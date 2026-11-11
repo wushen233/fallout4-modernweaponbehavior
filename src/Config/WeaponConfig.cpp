@@ -94,17 +94,22 @@ namespace
 
     struct FireModeOptions
     {
+        std::optional<std::string>              KeyID;
+        std::optional<bool>                     HasSwitchAnimation;
         std::optional<std::vector<BoneOptions>> AutoBones;
         std::optional<std::vector<BoneOptions>> SingleBones;
         std::optional<float>                    Blend;
         std::optional<OModReferenceOptions>       AutomaticOMod;
         std::optional<OModReferenceOptions>       SemiAutomaticOMod;
+        std::optional<std::vector<OModReferenceOptions>> RequiresAnyOMods;
     };
 
     struct OModSwitchGroupOptions
     {
         std::optional<std::string> Id;
+        std::optional<std::string> KeyID;
         std::optional<std::string> Category;
+        std::optional<bool> RefreshEquipped;
         std::optional<OModReferenceOptions> AttachPoint;
         std::optional<std::string> Filter;
         std::optional<std::vector<OModReferenceOptions>> OMods;
@@ -125,6 +130,7 @@ namespace
     struct AmmoSwitchProfileOptions
     {
         std::string Id;
+        std::optional<std::string> KeyID;
         OModReferenceOptions BaseAmmo;
         std::optional<OModReferenceOptions> BaseOMod;
         std::vector<AmmoSwitchTypeOptions> AmmoTypes;
@@ -187,7 +193,7 @@ template <>
 struct glz::meta<OModSwitchGroupOptions>
 {
     using T = OModSwitchGroupOptions;
-    static constexpr auto value = object("id", &T::Id, "category", &T::Category, "attachPoint", &T::AttachPoint,
+    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "category", &T::Category, "refreshEquipped", &T::RefreshEquipped, "attachPoint", &T::AttachPoint,
         "filter", &T::Filter, "omods", &T::OMods);
 };
 
@@ -209,7 +215,7 @@ template <>
 struct glz::meta<AmmoSwitchProfileOptions>
 {
     using T = AmmoSwitchProfileOptions;
-    static constexpr auto value = object("id", &T::Id, "baseAmmo", &T::BaseAmmo, "baseOMod", &T::BaseOMod,
+    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "baseAmmo", &T::BaseAmmo, "baseOMod", &T::BaseOMod,
         "ammoTypes", &T::AmmoTypes);
 };
 
@@ -276,8 +282,8 @@ template <>
 struct glz::meta<FireModeOptions>
 {
     using T = FireModeOptions;
-    static constexpr auto value = object("autoBones", &T::AutoBones, "singleBones", &T::SingleBones, "blend", &T::Blend,
-        "automaticOMod", &T::AutomaticOMod, "semiAutomaticOMod", &T::SemiAutomaticOMod);
+    static constexpr auto value = object("keyID", &T::KeyID, "hasSwitchAnimation", &T::HasSwitchAnimation, "autoBones", &T::AutoBones, "singleBones", &T::SingleBones, "blend", &T::Blend,
+        "automaticOMod", &T::AutomaticOMod, "semiAutomaticOMod", &T::SemiAutomaticOMod, "requiresAnyOMods", &T::RequiresAnyOMods);
 };
 
 template <>
@@ -571,6 +577,9 @@ namespace
 
     [[nodiscard]] std::optional<std::uint32_t> ParseHex(std::string_view Text)
     {
+        if (!IsFormID(Text) || Text.size() <= 2)
+            return std::nullopt;
+
         Text.remove_prefix(2);
 
         std::uint32_t Value = 0;
@@ -961,6 +970,12 @@ namespace
 
     [[nodiscard]] std::optional<FireModeRule> MakeRule(const FireModeOptions& Options, std::string_view Where)
     {
+        if (Options.KeyID && Options.KeyID->empty())
+        {
+            REX::WARN("  {}: fireModeSwitch keyID cannot be empty", Where);
+            return std::nullopt;
+        }
+
         if (Options.Blend && *Options.Blend < 0.0f)
         {
             REX::WARN("  {}: blend {} is not a number of seconds >= 0", Where, *Options.Blend);
@@ -1010,11 +1025,35 @@ namespace
         }
 
         FireModeRule Rule{
+            .KeyID = Options.KeyID.value_or(std::string{}),
             .AutomaticOMod = AutomaticOMod,
             .SemiAutomaticOMod = SemiAutomaticOMod,
             .AttachPoint = AttachPoint,
-            .Blend = Options.Blend.value_or(0.0f)
+            .Blend = Options.Blend.value_or(0.0f),
+            .HasSwitchAnimation = Options.HasSwitchAnimation
         };
+
+        if (Options.RequiresAnyOMods)
+        {
+            if (Options.RequiresAnyOMods->empty())
+            {
+                REX::WARN("  {}: requiresAnyOMods must contain at least one OMOD reference", Where);
+                return std::nullopt;
+            }
+
+            for (const auto& Reference : *Options.RequiresAnyOMods)
+            {
+                auto* OMod = ResolveOMod(Reference, "requiresAnyOMods[]"sv);
+                if (!OMod || OMod->targetFormType != RE::ENUM_FORM_ID::kWEAP ||
+                    !RE::detail::BGSKeywordGetTypedKeywordByIndex(RE::KeywordType::kAttachPoint, OMod->attachPoint.keywordIndex))
+                {
+                    REX::WARN("  {}: every requiresAnyOMods entry must resolve to a weapon attachment OMOD", Where);
+                    return std::nullopt;
+                }
+                if (std::ranges::find(Rule.RequiresAnyOMods, OMod) == Rule.RequiresAnyOMods.end())
+                    Rule.RequiresAnyOMods.push_back(OMod);
+            }
+        }
 
         for (const auto& [Key, Source, Target] : { std::tuple{ "autoBones"sv, &Options.AutoBones, &Rule.AutoBones },
                  std::tuple{ "singleBones"sv, &Options.SingleBones, &Rule.SingleBones } })
@@ -1128,7 +1167,8 @@ namespace
 
     [[nodiscard]] std::string Describe(const FireModeRule& Rule)
     {
-        return std::format(", automatic OMOD={:08X}, semi-automatic OMOD={:08X}, {}{}, blend {:.3f}s",
+        return std::format(", switch animation={}, automatic OMOD={:08X}, semi-automatic OMOD={:08X}, {}{}, blend {:.3f}s",
+            !Rule.HasSwitchAnimation ? "auto-detected" : (*Rule.HasSwitchAnimation ? "forced on" : "forced off"),
             Rule.AutomaticOMod->GetFormID(), Rule.SemiAutomaticOMod->GetFormID(),
             DescribeBones(Rule.AutoBones, "autoBones"sv), DescribeBones(Rule.SingleBones, "singleBones"sv), Rule.Blend);
     }
@@ -1305,9 +1345,10 @@ namespace
                         return LocalID ? LookupForm(*Reference.Plugin, *LocalID) : nullptr;
                     };
 
-                    if (!Options.Id || Options.Id->empty() || !Options.Category || !Options.AttachPoint || !Options.Filter)
+                    if (!Options.Id || Options.Id->empty() || !Options.AttachPoint || !Options.Filter ||
+                        (!Options.Category && (!Options.KeyID || Options.KeyID->empty())))
                     {
-                        REX::WARN("  {}: group requires id, category, attachPoint, and filter", GroupWhere);
+                        REX::WARN("  {}: group requires id, attachPoint, filter, and either category or keyID", GroupWhere);
                         continue;
                     }
                     const auto AttachForm = ParseReference(*Options.AttachPoint, "attachPoint"sv);
@@ -1322,14 +1363,17 @@ namespace
                     }
 
                     std::optional<OModCategory> Category;
-                    if (*Options.Category == "muzzle") Category = OModCategory::Muzzle;
-                    else if (*Options.Category == "sight") Category = OModCategory::Sight;
-                    else if (*Options.Category == "ammunition") Category = OModCategory::Ammunition;
-                    else if (*Options.Category == "underbarrel") Category = OModCategory::Underbarrel;
-                    if (!Category)
+                    if (Options.Category)
                     {
-                        REX::WARN("  {}: unknown category '{}'", GroupWhere, *Options.Category);
-                        continue;
+                        if (*Options.Category == "muzzle") Category = OModCategory::Muzzle;
+                        else if (*Options.Category == "sight") Category = OModCategory::Sight;
+                        else if (*Options.Category == "ammunition") Category = OModCategory::Ammunition;
+                        else if (*Options.Category == "underbarrel") Category = OModCategory::Underbarrel;
+                        if (!Category)
+                        {
+                            REX::WARN("  {}: unknown category '{}'", GroupWhere, *Options.Category);
+                            continue;
+                        }
                     }
 
                     std::optional<OModFilter> Filter;
@@ -1342,7 +1386,16 @@ namespace
                         continue;
                     }
 
-                    OModSwitchGroup Group{ .Id = *Options.Id, .Category = *Category, .Filter = *Filter, .AttachPoint = AttachPoint };
+                    if (Options.KeyID && Options.KeyID->empty())
+                    {
+                        REX::WARN("  {}: keyID cannot be empty", GroupWhere);
+                        continue;
+                    }
+
+                    OModSwitchGroup Group{ .Id = *Options.Id, .KeyID = Options.KeyID.value_or(std::string{}),
+                        .Category = Category, .Filter = *Filter,
+                        .RefreshEquipped = Options.RefreshEquipped.value_or(Category == OModCategory::Muzzle || Category == OModCategory::Sight),
+                        .AttachPoint = AttachPoint };
                     if (*Filter != OModFilter::All && (!Options.OMods || Options.OMods->empty()))
                     {
                         REX::WARN("  {}: include/exclude filters need at least one OMOD reference", GroupWhere);
@@ -1440,11 +1493,17 @@ namespace
             return;
         }
 
+        if (Options.KeyID && Options.KeyID->empty())
+        {
+            REX::WARN("  {}: ammo switch profile keyID cannot be empty", Where);
+            return;
+        }
+
         const auto BaseAmmo = ParseAmmoReference(Options.BaseAmmo, std::format("{} baseAmmo", Where));
         if (!BaseAmmo)
             return;
 
-        WeaponConfig::AmmoSwitchProfile Profile{ .Id = Options.Id };
+        WeaponConfig::AmmoSwitchProfile Profile{ .Id = Options.Id, .KeyID = Options.KeyID.value_or(std::string{}) };
         const auto AddType = [&](const OModReferenceOptions& AmmoReference, const std::optional<OModReferenceOptions>& OModReference,
                                  std::string_view TypeWhere) -> bool
         {
@@ -1477,6 +1536,12 @@ namespace
             if (std::ranges::any_of(Profile.Types, [Ammo](const auto& Type) { return Type.Ammo == Ammo; }))
             {
                 REX::WARN("  {}: duplicate ammo form {:08X} in profile '{}'", TypeWhere, Ammo->GetFormID(), Options.Id);
+                return false;
+            }
+            if (OMod && std::ranges::any_of(Profile.Types, [OMod](const auto& Type) { return Type.OMod == OMod; }))
+            {
+                REX::WARN("  {}: OMOD {:08X} is assigned to more than one ammo type in profile '{}'", TypeWhere,
+                    OMod->GetFormID(), Options.Id);
                 return false;
             }
 
@@ -1523,7 +1588,8 @@ namespace
             return;
         for (std::size_t i = 0; i < It->second.Types.size(); ++i)
             AmmoSwitchLookups.emplace(It->second.Types[i].Ammo, AmmoSwitchLookup{ .BaseAmmo = BaseAmmo, .TypeIndex = i });
-        REX::INFO("  {}: loaded ammo switch profile '{}' with {} type(s)", Where, It->second.Id, It->second.Types.size());
+        REX::INFO("  {}: loaded ammo switch profile '{}' with {} type(s){}", Where, It->second.Id, It->second.Types.size(),
+            It->second.KeyID.empty() ? "" : std::format(", keyID '{}'", It->second.KeyID));
     }
 
     void AddExclusion(const ExclusionEntry& Entry, std::string_view Where)

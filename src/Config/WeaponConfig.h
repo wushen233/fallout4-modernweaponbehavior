@@ -34,8 +34,10 @@ namespace WeaponConfig
     struct OModSwitchGroup
     {
         std::string Id;
-        OModCategory Category{ OModCategory::Muzzle };
+        std::string KeyID;
+        std::optional<OModCategory> Category;
         OModFilter Filter{ OModFilter::All };
+        bool RefreshEquipped{ false };
         RE::BGSKeyword* AttachPoint{ nullptr };
         std::vector<const RE::BGSMod::Attachment::Mod*> OMods;
     };
@@ -49,6 +51,7 @@ namespace WeaponConfig
     struct AmmoSwitchProfile
     {
         std::string Id;
+        std::string KeyID;
         RE::BGSKeyword* AttachPoint{ nullptr };
         std::vector<AmmoSwitchType> Types;
     };
@@ -149,12 +152,15 @@ namespace WeaponConfig
 
     struct FireModeRule
     {
+        std::string KeyID;
         const RE::BGSMod::Attachment::Mod* AutomaticOMod{ nullptr };
         const RE::BGSMod::Attachment::Mod* SemiAutomaticOMod{ nullptr };
+        std::vector<const RE::BGSMod::Attachment::Mod*> RequiresAnyOMods;
         RE::BGSKeyword*         AttachPoint{ nullptr };
         std::vector<BoneOffset> AutoBones;
         std::vector<BoneOffset> SingleBones;
         float                   Blend{ 0.0f };
+        std::optional<bool>     HasSwitchAnimation;
     };
 
     void Load();

@@ -18,12 +18,17 @@ namespace FireMode
 {
     void Initialize();
 
+    [[nodiscard]] bool MatchesKeyID(
+        RE::TESObjectWEAP* Base,
+        const RE::TESObjectWEAP::InstanceData* Instance,
+        std::string_view KeyID);
+
     [[nodiscard]] bool Refuse(const RE::BSFixedString& Event);
 
     [[nodiscard]] std::optional<bool> HandleWithoutAnimation(const RE::BSFixedString& Event);
     [[nodiscard]] std::optional<bool> SwitchWithoutAnimation();
 
-    void OnEventSent(const RE::BSFixedString& Event, bool Accepted);
+    [[nodiscard]] bool OnEventSent(const RE::BSFixedString& Event, bool Accepted);
 
     void OnAnimationEvent(const RE::BSFixedString& Tag);
 

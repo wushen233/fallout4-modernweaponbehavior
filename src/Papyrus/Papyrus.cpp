@@ -13,10 +13,12 @@
 */
 
 #include "Papyrus.h"
+#include "Core/EquippedWeapon.h"
 #include "Core/OModSwitch.h"
 #include "HUD/AmmoCheckDisplay.h"
 #include "Weapon/FireMode.h"
 #include "Settings/Settings.h"
+#include "Weapon/FireMode.h"
 
 #include <variant>
 
@@ -88,6 +90,20 @@ namespace
     {
         return OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Underbarrel);
     }
+
+    bool SwitchOModGroup(GlobalFunctionSelf, RE::BSFixedString a_keyID)
+    {
+        if (Settings::VerboseLog())
+            REX::INFO("Papyrus: SwitchOModGroup received keyID '{}'", a_keyID.c_str());
+        const auto weapon = Core::GetEquippedWeapon(RE::PlayerCharacter::GetSingleton());
+        if (weapon && FireMode::MatchesKeyID(weapon->Base, weapon->Instance, a_keyID.c_str()))
+        {
+            if (Settings::VerboseLog())
+                REX::INFO("Papyrus: keyID '{}' routed to the fire-mode rule", a_keyID.c_str());
+            return Send("MWB_SwitchFireModeStart");
+        }
+        return OModSwitch::CycleEquippedOMod(a_keyID.c_str());
+    }
 }
 
 namespace Papyrus
@@ -116,6 +132,7 @@ namespace Papyrus
             VM->BindNativeMethod(ScriptName, "SwitchSightOMod", SwitchSightOMod);
             VM->BindNativeMethod(ScriptName, "SwitchAmmunitionOMod", SwitchAmmunitionOMod);
             VM->BindNativeMethod(ScriptName, "SwitchUnderbarrelOMod", SwitchUnderbarrelOMod);
+            VM->BindNativeMethod(ScriptName, "SwitchOModGroup", SwitchOModGroup);
             if (!OModSwitch::RegisterPapyrusFunctions(VM))
                 return false;
             REX::INFO("Papyrus functions registered on \"{}\"", ScriptName);

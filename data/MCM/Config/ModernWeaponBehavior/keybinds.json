@@ -3,7 +3,7 @@
   "keybinds": [
     {
       "id": "MWBMCMHKInspect",
-      "desc": "Inspect weapon",
+      "desc": "$MWB_MCM_Inspect_weapon",
       "action": {
         "type": "CallGlobalFunction",
         "script": "MWB",
@@ -12,7 +12,7 @@
     },
     {
       "id": "MWBMCMHKAmmoCheck",
-      "desc": "Check ammo",
+      "desc": "$MWB_MCM_Check_ammo",
       "action": {
         "type": "CallGlobalFunction",
         "script": "MWB",
@@ -21,7 +21,7 @@
     },
     {
       "id": "MWBMCMHKSwitchFireMode",
-      "desc": "Switch fire mode",
+      "desc": "$MWB_MCM_Switch_fire_mode",
       "action": {
         "type": "CallGlobalFunction",
         "script": "MWB",
@@ -30,23 +30,39 @@
     },
     {
       "id": "MWBMCMHKSwitchMuzzleOMod",
-      "desc": "Switch muzzle OMOD",
-      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchMuzzleOMod" }
+      "desc": "$MWB_MCM_Switch_muzzle_OMOD",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "SwitchMuzzleOMod"
+      }
     },
     {
       "id": "MWBMCMHKSwitchSightOMod",
-      "desc": "Switch sight OMOD",
-      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchSightOMod" }
+      "desc": "$MWB_MCM_Switch_sight_OMOD",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "SwitchSightOMod"
+      }
     },
     {
       "id": "MWBMCMHKSwitchAmmunitionOMod",
-      "desc": "Switch ammunition OMOD",
-      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchAmmunitionOMod" }
+      "desc": "$MWB_MCM_Switch_ammunition_OMOD",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "SwitchAmmunitionOMod"
+      }
     },
     {
       "id": "MWBMCMHKSwitchUnderbarrelOMod",
-      "desc": "Switch underbarrel OMOD",
-      "action": { "type": "CallGlobalFunction", "script": "MWB", "function": "SwitchUnderbarrelOMod" }
+      "desc": "$MWB_MCM_Switch_underbarrel_OMOD",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "SwitchUnderbarrelOMod"
+      }
     }
   ]
 }

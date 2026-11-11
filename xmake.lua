@@ -2,6 +2,7 @@ set_xmakever("3.0.0")
 
 set_config("commonlib_ini", true)
 set_config("commonlib_json", true)
+set_config("commonlib_xbyak", true)
 
 includes("lib/commonlibf4")
 

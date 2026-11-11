@@ -28,13 +28,15 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 
 ## Fire mode switch animation
 
-Fire mode switching plays `WPNSwitchFireMode.hkx` by default. The global MCM option **Play fire mode switch animation** controls whether a switching clip is requested; when it is off, MWB applies the configured mode change directly without requiring the clip. This is a global setting and does not belong in individual weapon JSON files:
+Fire mode switching automatically checks the equipped weapon graph's animation resource directory for `WPNSwitchFireMode.hkx`. When found, MWB follows the regular animation path; when absent, the global MCM option **Allow fire mode switching without an animation** controls first-person behavior. A weapon entry can override detection with `hasSwitchAnimation: true` or `false`; omit the field (or set it to `null`) to use automatic detection. Third-person switching remains instant.
 
 ```json
 {
   "plugin": "Fallout4.esm",
   "weapon": "0x00004822",
   "fireModeSwitch": {
+    "keyID": "ExampleMod_MyRifle_FireMode",
+    "hasSwitchAnimation": true,
     "automaticOMod": {
       "plugin": "Modern Weapon Behavior.esp",
       "formId": "0x00000801"
@@ -47,7 +49,18 @@ Fire mode switching plays `WPNSwitchFireMode.hkx` by default. The global MCM opt
 }
 ```
 
-Both OMOD references are required and must use the same attach point. The plugin name and plugin-local FormID can refer to any loaded plugin. The animation setting defaults to on, preserving the existing animation-driven behavior.
+Both OMOD references are required and must use the same attach point. The plugin name and plugin-local FormID can refer to any loaded plugin. `hasSwitchAnimation` is optional: omit it to detect the clip automatically, or set it to `true`/`false` to override detection. The animation-optional setting defaults to off, preserving the animation-required behavior when no switch clip is found.
+
+To limit fire-mode switching to weapons fitted with a suitable receiver, add `requiresAnyOMods` with one or more receiver OMOD references. At least one listed OMOD must be installed on the equipped weapon. MWB registers those OMOD attach points on the configured weapon before saves are loaded, so the receiver remains serialized and the requirement can be checked after loading:
+
+```json
+"requiresAnyOMods": [
+  { "plugin": "ExampleWeapon.esp", "formId": "0x00000820" },
+  { "plugin": "ExampleWeapon.esp", "formId": "0x00000821" }
+]
+```
+
+Omit the field to preserve the previous behavior, where any weapon matching `fireModeSwitch` can switch modes.
 
 Fire-mode configurations that omit either OMOD reference are rejected with a warning; add both references when migrating an existing configuration.
 
@@ -55,13 +68,13 @@ The upstream **Switch fire mode on every gun** option (`FireModeSwitch/bEveryGun
 
 ## Generic OMOD switch groups
 
-Shared OMOD switch profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. Weapon entries reference one or more profile IDs using `omodSwitchProfiles`. Each group selects one MCM hotkey category (`muzzle`, `sight`, `ammunition`, or `underbarrel`), an attach-point keyword, and a filter mode:
+Shared OMOD switch profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. Weapon entries reference one or more profile IDs using `omodSwitchProfiles`. Each group selects an attach-point keyword and a filter mode:
 
 * `all`: cycle loaded weapon OMODs at that attach point, except records with additional parent or instantiation-filter constraints.
 * `include`: cycle only OMODs listed in `omods`.
 * `exclude`: cycle OMODs at that attach point except those listed in `omods`, with the same compatibility-constraint exclusions as `all`.
 
-Each equipped weapon may have at most one group for a hotkey category. The four category hotkeys are bound on the MCM **Hotkeys** page. An example profile and weapon entry:
+Groups can use one of the built-in hotkey categories (`muzzle`, `sight`, `ammunition`, or `underbarrel`), or use a custom `keyID` without a category. A custom ID selects that exact group, so add-ons can register independent hotkeys without adding a new hard-coded category to MWB. Keep `category` for compatibility with MWB's built-in category hotkeys. `refreshEquipped: true` opts into the native live equipped-weapon refresh used for visual attachment changes; it requires MWB's supported native OMOD runtime path (`1.10.163` or `1.11.240`). Omitted groups preserve the legacy behavior, which defaults this on for muzzle and sight categories and off for other categories.
 
 ```json
 {
@@ -71,7 +84,8 @@ Each equipped weapon may have at most one group for a hotkey category. The four 
       "groups": [
         {
           "id": "muzzle",
-          "category": "muzzle",
+          "keyID": "ExampleMod_MyRifle_Muzzle",
+          "refreshEquipped": true,
           "attachPoint": { "plugin": "ExampleWeapon.esp", "formId": "0x00000800" },
           "filter": "include",
           "omods": [
@@ -92,13 +106,30 @@ Each equipped weapon may have at most one group for a hotkey category. The four 
 }
 ```
 
+To register an add-on hotkey, give it a unique ID in that add-on's `MCM/Config/<ModName>/keybinds.json`, expose the same ID as a `hotkey` control in its `config.json`, and call MWB's Papyrus function with the ID as a string parameter:
+
+```json
+{
+  "id": "ExampleMod_MyRifle_Muzzle",
+  "desc": "Switch rifle muzzle",
+  "action": {
+    "type": "CallGlobalFunction",
+    "script": "MWB",
+    "function": "SwitchOModGroup",
+    "params": [ "ExampleMod_MyRifle_Muzzle" ]
+  }
+}
+```
+
+The hotkey control in `config.json` must use the same ID. The registered keybind ID must exactly match the configured `keyID`; IDs are case-sensitive and should be unique across switch groups, ammo profiles, and fire-mode rules on a weapon. Keep the built-in category keybinds for compatibility, or use unique add-on IDs when a weapon needs multiple independently switchable controls in one category. The generic Papyrus entry routes fire-mode IDs through MWB's existing animation-aware switch event.
+
 The attach point is injected into configured weapon records at data-ready time so the engine can construct the selected OMOD instance. Generic OMOD switching currently requires the equipped weapon instance to be uniquely resolvable; unsupported or ambiguous stacks fail without changing the weapon.
 
 On `1.10.163` and `1.11.240`, muzzle and sight groups share the native inventory and equip refresh used by ammo subtype switching. Switch while the weapon is drawn and idle, with ADS released. These groups preserve the loaded round count and reject changes to the weapon's ammo type or magazine capacity. `10mmMuzzleSwitchTest.json` configures the standard muzzle, suppressor, iron sights and reflex sight for testing.
 
 ## Ammo subtype switch profiles
 
-Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. They are matched by the equipped weapon instance's current ammo form, so weapons that use a configured ammo type do not need individual weapon entries. `baseAmmo` is the first cycle entry; each `ammoTypes` entry pairs an `ammo` form with the OMOD that applies it. `baseOMod` is optional when the base ammo is represented by having no OMOD at the ammo attach point. If provided, it is used when cycling back to the configured base state; a weapon already using that base ammo without the OMOD is also accepted as the initial state.
+Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. They are matched by the equipped weapon instance's current ammo form, so weapons that use a configured ammo type do not need individual weapon entries. `baseAmmo` is the first cycle entry; each `ammoTypes` entry pairs an `ammo` form with the OMOD that applies it. `baseOMod` is optional when the base ammo is represented by having no OMOD at the ammo attach point. If provided, it is used when cycling back to the configured base state; a weapon already using that base ammo without the OMOD is also accepted as the initial state. An optional profile `keyID` lets an add-on's MCM hotkey select this ammo profile through `MWB.SwitchOModGroup`, alongside the legacy category hotkey.
 
 ```json
 {
@@ -118,7 +149,7 @@ Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4
 }
 ```
 
-The configured OMODs must target weapons and share one valid attach point. Every alternate ammo type needs an OMOD; the base ammo may omit one. Duplicate ammo forms and duplicate base-ammo profiles are rejected with a warning. For weapons whose base ammo matches a profile, MWB registers the attach point before loading a save so the stored OMOD can be restored. The **Switch ammunition OMOD** hotkey requests a normal reload after a successful switch. If the game initially refuses it, MWB retries for up to two seconds while the same weapon and ammo are equipped and the magazine is empty. When no ammo profile matches, the hotkey continues to use the generic ammunition OMOD group if configured. A weapon with both kinds of configuration is refused as ambiguous.
+The configured OMODs must target weapons and share one valid attach point. Every alternate ammo type needs an OMOD; the base ammo may omit one. Duplicate ammo forms, duplicate OMODs, and duplicate base-ammo profiles are rejected with a warning. For weapons whose base ammo matches a profile, MWB registers the attach point before loading a save so the stored OMOD can be restored. The **Switch ammunition OMOD** hotkey requests a normal reload after a successful switch. If the game initially refuses it, MWB retries for up to two seconds while the same weapon and ammo are equipped and the magazine is empty. Queued switches are cancelled when a save starts loading. When no ammo profile matches, the hotkey continues to use the generic ammunition OMOD group if configured. A weapon with both kinds of configuration is refused as ambiguous.
 
 `data/F4SE/Plugins/MWB/ExpandingBullets_10mmAmmoSwitch.json` contains the first migrated profile from Expanding Bullets. It includes ammo/OMOD switching data only; loot generation and crafting data are intentionally omitted.
 

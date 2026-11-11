@@ -14,9 +14,16 @@
 
 #pragma once
 
+namespace RE
+{
+    class BGSKeyword;
+    class TESObjectWEAP;
+}
+
 namespace Core
 {
     [[nodiscard]] bool RuntimeSupported();
+    [[nodiscard]] bool HasDefaultTemplateAttachPoint(RE::TESObjectWEAP* a_weapon, RE::BGSKeyword* a_attachPoint);
 
     void F4SELoaded();
     void GameDataReady();

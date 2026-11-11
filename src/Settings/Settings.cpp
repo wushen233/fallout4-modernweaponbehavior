@@ -26,8 +26,9 @@ namespace
     REX::TIniSetting<bool> ManualReloadSetting{ "ManualReload", "bEnabled", false };
     REX::TIniSetting<bool> SlideLockSetting{ "SlideLock", "bEnabled", true };
     REX::TIniSetting<bool> FireModeSwitchSetting{ "FireModeSwitch", "bEnabled", true };
-    REX::TIniSetting<bool> FireModeSwitchAnimationSetting{ "FireModeSwitch", "bPlayAnimation", true };
+    REX::TIniSetting<bool> FireModeAnimationOptionalSetting{ "FireModeSwitch", "bAnimationOptional", false };
     REX::TIniSetting<bool> FireModeEveryGunSetting{ "FireModeSwitch", "bEveryGun", false };
+    REX::TIniSetting<bool> PipboyAmmoReloadAnimationSetting{ "AmmoSwitch", "bPipboyReloadAnimation", false };
     REX::TIniSetting<bool> WeaponHUDSetting{ "WeaponHUD", "bEnabled", true };
     REX::TIniSetting<bool> AmmoCheckEveryGunSetting{ "AmmoCheck", "bEveryGun", false };
     REX::TIniSetting<bool> ThirdPersonSprintFOVSetting{ "ThirdPersonSprintFOV", "bEnabled", true };
@@ -73,8 +74,9 @@ namespace
         McmBool{ "ManualReload", "bEnabled", &ManualReloadSetting },
         McmBool{ "SlideLock", "bEnabled", &SlideLockSetting },
         McmBool{ "FireModeSwitch", "bEnabled", &FireModeSwitchSetting },
-        McmBool{ "FireModeSwitch", "bPlayAnimation", &FireModeSwitchAnimationSetting },
+        McmBool{ "FireModeSwitch", "bAnimationOptional", &FireModeAnimationOptionalSetting },
         McmBool{ "FireModeSwitch", "bEveryGun", &FireModeEveryGunSetting },
+        McmBool{ "AmmoSwitch", "bPipboyReloadAnimation", &PipboyAmmoReloadAnimationSetting },
         McmBool{ "WeaponHUD", "bEnabled", &WeaponHUDSetting },
         McmBool{ "AmmoCheck", "bEveryGun", &AmmoCheckEveryGunSetting },
         McmBool{ "ThirdPersonSprintFOV", "bEnabled", &ThirdPersonSprintFOVSetting },
@@ -129,18 +131,21 @@ namespace
             if (McmIni.GetValue(Section, Key))
                 Setting->SetValue(static_cast<float>(McmIni.GetDoubleValue(Section, Key, Setting->GetValue())));
         }
+
+        if (!McmIni.GetValue("FireModeSwitch", "bAnimationOptional") && McmIni.GetValue("FireModeSwitch", "bPlayAnimation"))
+            FireModeAnimationOptionalSetting.SetValue(!McmIni.GetBoolValue("FireModeSwitch", "bPlayAnimation", true));
     }
 
     void LogValues(std::string_view When)
     {
         REX::INFO("Settings ({}): verboseLog={}, bulletInChamber={} (tactical reload only {}), dropUnspentAmmo={}, manualReload={}, slideLock={}, fireModeSwitch={} (every gun {}), weaponHUD={}, ammoCheckEveryGun={}, "
                   "thirdPersonSprintFOV={}, aimWobble(vanillaScopes={}, 3DScopes={}, noScope={}), holdBlock={}, fireWhileSprinting={}, sightedFireJiggle={}, "
-                  "fireModeSwitchAnimation={}, fullEquipOnSwitch={}, tacticalSprint={} (speed x{:.2f}, action points x{:.2f}, animation x{:.2f}), slide={} (duration {:.2f}s, "
+                  "fireModeAnimationOptional={}, pipboyAmmoReloadAnimation={}, fullEquipOnSwitch={}, tacticalSprint={} (speed x{:.2f}, action points x{:.2f}, animation x{:.2f}), slide={} (duration {:.2f}s, "
                   "committed {:.2f}s, speed x{:.2f})",
             When, VerboseLogSetting.GetValue(), BulletInChamberSetting.GetValue(), BulletInChamberTacticalOnlySetting.GetValue(), DropUnspentAmmoSetting.GetValue(), ManualReloadSetting.GetValue(),
             SlideLockSetting.GetValue(), FireModeSwitchSetting.GetValue(), FireModeEveryGunSetting.GetValue(), WeaponHUDSetting.GetValue(), AmmoCheckEveryGunSetting.GetValue(), ThirdPersonSprintFOVSetting.GetValue(),
             AimWobbleVanillaScopesSetting.GetValue(), AimWobble3DScopesSetting.GetValue(), AimWobbleNoScopeSetting.GetValue(), HoldBlockSetting.GetValue(), FireWhileSprintingSetting.GetValue(),
-            SightedFireJiggleSetting.GetValue(), FireModeSwitchAnimationSetting.GetValue(), FullEquipOnSwitchSetting.GetValue(), TacticalSprintSetting.GetValue(),
+            SightedFireJiggleSetting.GetValue(), FireModeAnimationOptionalSetting.GetValue(), PipboyAmmoReloadAnimationSetting.GetValue(), FullEquipOnSwitchSetting.GetValue(), TacticalSprintSetting.GetValue(),
             Settings::TacticalSprintSpeed(), Settings::TacticalSprintActionPoints(), Settings::TacticalSprintAnimation(), SlideSetting.GetValue(),
             Settings::SlideDuration(), Settings::SlideCommittedTime(), Settings::SlideSpeed());
     }
@@ -204,14 +209,19 @@ namespace Settings
         return FireModeSwitchAtStartup;
     }
 
-    bool FireModeSwitchAnimation()
+    bool FireModeAnimationOptional()
     {
-        return FireModeSwitchAnimationSetting.GetValue();
+        return FireModeAnimationOptionalSetting.GetValue();
     }
 
     bool FireModeEveryGun()
     {
         return FireModeEveryGunSetting.GetValue();
+    }
+
+    bool PipboyAmmoReloadAnimation()
+    {
+        return PipboyAmmoReloadAnimationSetting.GetValue();
     }
 
     bool WeaponHUD()

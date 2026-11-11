@@ -37,5 +37,7 @@ namespace Hooks
 
     [[nodiscard]] const void* FindActiveClip(std::span<const std::string_view> Names);
 
+    [[nodiscard]] bool HasFireModeSwitchAnimation(RE::Actor* Actor);
+
     [[nodiscard]] RE::Actor* ActorOfCharacter(const void* Character);
 }

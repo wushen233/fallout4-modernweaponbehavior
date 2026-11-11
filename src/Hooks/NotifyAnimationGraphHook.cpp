@@ -144,7 +144,8 @@ namespace
             SightedBoltCharge::OnEventSent(*SentEvent, Accepted);
             DropUnspentAmmo::OnEventSent(*SentEvent, Accepted);
             ArmSpace::OnEventSent(*SentEvent, Accepted);
-            FireMode::OnEventSent(*SentEvent, Accepted);
+            if (FireMode::OnEventSent(*SentEvent, Accepted))
+                Accepted = true;
             HoldBlock::OnEventSent(*SentEvent, Accepted);
             SprintFire::OnEventSent(*SentEvent, Accepted);
             Reload::TraceSent(*SentEvent, Accepted, "NotifyAnimationGraphImpl"sv);
