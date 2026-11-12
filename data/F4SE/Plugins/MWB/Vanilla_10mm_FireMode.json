@@ -5,7 +5,12 @@
       "weapon": "0x00004822",
       "fireModeSwitch": {
         "requiresAnyOMods": [
-          { "plugin": "Fallout4.esm", "formId": "0x000E34D8" }
+          { "plugin": "Fallout4.esm", "formId": "0x00100E2E" },
+          { "plugin": "Fallout4.esm", "formId": "0x0014833B" },
+          { "plugin": "Fallout4.esm", "formId": "0x0015FA1F" },
+          { "plugin": "Fallout4.esm", "formId": "0x0015FA2B" },
+          { "plugin": "Fallout4.esm", "formId": "0x0015FA2F" },
+          { "plugin": "Fallout4.esm", "formId": "0x00161D0F" }
         ],
         "automaticOMod": {
           "plugin": "Modern Weapon Behavior.esp",

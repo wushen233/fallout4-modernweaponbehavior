@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "plugin": "DLCNukaWorld.esm",
+      "weapon": "0x06033B60",
+      "fireModeSwitch": {
+        "requiresAnyOMods": [
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x06037886" },
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x06037887" },
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x06037888" },
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x06037889" },
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x0603788A" },
+          { "plugin": "DLCNukaWorld.esm", "formId": "0x0603788B" }
+        ],
+        "automaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000801"
+        },
+        "semiAutomaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000802"
+        }
+      }
+    }
+  ]
+}

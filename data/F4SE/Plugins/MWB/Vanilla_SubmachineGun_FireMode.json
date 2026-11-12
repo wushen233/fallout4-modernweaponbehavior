@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "plugin": "Fallout4.esm",
+      "weapon": "0x0015B043",
+      "fireModeSwitch": {
+        "requiresAnyOMods": [
+          { "plugin": "Fallout4.esm", "formId": "0x0015B044" },
+          { "plugin": "Fallout4.esm", "formId": "0x001B28F8" },
+          { "plugin": "Fallout4.esm", "formId": "0x001B28F9" },
+          { "plugin": "Fallout4.esm", "formId": "0x001B28FA" },
+          { "plugin": "Fallout4.esm", "formId": "0x001B28FB" },
+          { "plugin": "Fallout4.esm", "formId": "0x001B28FC" }
+        ],
+        "automaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000801"
+        },
+        "semiAutomaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000802"
+        }
+      }
+    }
+  ]
+}

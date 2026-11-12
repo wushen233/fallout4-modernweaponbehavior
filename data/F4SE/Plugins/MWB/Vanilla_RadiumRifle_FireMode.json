@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "plugin": "DLCCoast.esm",
+      "weapon": "0x03025FC4",
+      "fireModeSwitch": {
+        "requiresAnyOMods": [
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC37" },
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC38" },
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC39" },
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC3A" },
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC3B" },
+          { "plugin": "DLCCoast.esm", "formId": "0x0303EC3C" }
+        ],
+        "automaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000801"
+        },
+        "semiAutomaticOMod": {
+          "plugin": "Modern Weapon Behavior.esp",
+          "formId": "0x00000802"
+        }
+      }
+    }
+  ]
+}
