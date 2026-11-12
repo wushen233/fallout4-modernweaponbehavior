@@ -1,0 +1,71 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_762mmTokarev",
+      "weaponBaseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x000006CA"
+      },
+      "baseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x000006CA"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x001497EA"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C61"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C65"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C62"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C66"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C63"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C67"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C64"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000D1C68"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001497E9"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001497EB"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_556mm_223.1",
+      "weaponBaseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0001F278"
+      },
+      "baseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0001F278"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x001DED86"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F0A"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F0E"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "Munitions - An Ammo Expansion.esl",
+            "formId": "0x00000FAA"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F10"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F0B"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F0D"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001DED85"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001DED89"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B754"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B757"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B905"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0012B906"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ExpandingBullets.MR_556mm_223.2",
+      "weaponBaseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x00000FAA"
+      },
+      "baseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x00000FAA"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x001DED87"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00026F0B"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0002B36D"
+          }
+        }
+      ]
+    }
+  ]
+}

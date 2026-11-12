@@ -1,0 +1,51 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_127mm",
+      "weaponBaseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x00000FAE"
+      },
+      "baseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x00000FAE"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x00191F28"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000A2CC4"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000A7117"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001F4671"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001F4672"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000A2CC5"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000A7118"
+          }
+        }
+      ]
+    }
+  ]
+}

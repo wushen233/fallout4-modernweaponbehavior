@@ -1,0 +1,41 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_14mm",
+      "weaponBaseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x000007EF"
+      },
+      "baseAmmo": {
+        "plugin": "Munitions - An Ammo Expansion.esl",
+        "formId": "0x000007EF"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x000EB787"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000B3E0D"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000B3E0F"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000B3E0E"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000B3E10"
+          }
+        }
+      ]
+    }
+  ]
+}

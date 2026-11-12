@@ -56,6 +56,15 @@
           "valueOptions": {
             "sourceType": "ModSettingBool"
           }
+        },
+        {
+          "id": "bAutoSwitchWhenEmpty:AmmoSwitch",
+          "text": "$MWB_MCM_Auto_switch_ammo_when_empty",
+          "type": "switcher",
+          "help": "$MWB_MCM_When_the_magazine_runs_empty_MWB_switches_to_the_next_available_ammo_in_the_same_configured_family_Reload_behavior_follows_Manual_Reload_Default_OFF",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
         }
       ]
     },

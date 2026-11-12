@@ -1,0 +1,31 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_CryoCell",
+      "weaponBaseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0018ABE2"
+      },
+      "baseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0018ABE2"
+      },
+      "baseOMod": {
+        "plugin": "MunitionsReloaded.esp",
+        "formId": "0x0005E79E"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0005E79D"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x0005E79F"
+          }
+        }
+      ]
+    }
+  ]
+}

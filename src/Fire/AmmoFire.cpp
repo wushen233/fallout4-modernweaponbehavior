@@ -14,6 +14,7 @@
 
 #include "AmmoFire.h"
 #include "Core/EquippedWeapon.h"
+#include "Core/OModSwitch.h"
 #include "Settings/Settings.h"
 
 #include <unordered_map>
@@ -113,9 +114,29 @@ namespace
             if (FiringAmmo)
                 return 0;
 
-            const auto VirtualTable = *reinterpret_cast<const UseAmmoSignature* const*>(Actor);
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            auto* base = Weapon.object ? Weapon.object->As<RE::TESObjectWEAP>() : nullptr;
+            const auto* instance = static_cast<const RE::TESObjectWEAP::InstanceData*>(Weapon.instanceData.get());
+            std::uint32_t loadedBefore = 0;
+            if (Actor == player && base && instance)
+            {
+                const auto equipped = Core::GetEquippedWeapon(Actor);
+                if (equipped && equipped->Base == base && equipped->Instance == instance && equipped->Data)
+                    loadedBefore = equipped->Data->ammoCount;
+            }
 
-            return VirtualTable[UseAmmoOffset / sizeof(void*)](Actor, Weapon, EquipIndex, Flag);
+            const auto VirtualTable = *reinterpret_cast<const UseAmmoSignature* const*>(Actor);
+            const auto remaining = VirtualTable[UseAmmoOffset / sizeof(void*)](Actor, Weapon, EquipIndex, Flag);
+
+            if (loadedBefore > 0 && Actor == player && base && instance)
+            {
+                const auto equipped = Core::GetEquippedWeapon(Actor);
+                if (equipped && equipped->Base == base && equipped->Instance == instance && equipped->Data &&
+                    equipped->Data->ammoCount == 0)
+                    OModSwitch::OnAmmoDepleted(base, instance);
+            }
+
+            return remaining;
         }
     };
 

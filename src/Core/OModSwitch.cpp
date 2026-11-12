@@ -12,6 +12,7 @@
 #include "Core/Core.h"
 #include "Core/EquippedWeapon.h"
 #include "Core/GunState.h"
+#include "Reload/ManualReload.h"
 #include "Reload/SightedReload.h"
 #include "Settings/Settings.h"
 
@@ -548,7 +549,8 @@ namespace OModSwitch
             if (!ammo && weapon && weapon->Base)
                 ammo = weapon->Base->weaponData.ammo;
 
-            if (ammo && !WeaponConfig::MatchAmmoSwitch(ammo))
+            const auto* weaponBaseAmmo = weapon && weapon->Base ? weapon->Base->weaponData.ammo : nullptr;
+            if (ammo && !WeaponConfig::MatchAmmoSwitch(ammo, weaponBaseAmmo))
                 ammo = nullptr;
             UpdatePipboyAmmoEquipState(ammo);
         }
@@ -736,7 +738,8 @@ namespace OModSwitch
             const Core::EquippedWeapon& a_weapon,
             const WeaponConfig::AmmoSwitchMatch& a_match,
             std::optional<std::size_t> a_targetType = std::nullopt,
-            bool a_pipboyReloadAnimation = true)
+            bool a_pipboyReloadAnimation = true,
+            bool a_automaticSwitch = false)
         {
             const auto* profile = a_match.Profile;
             if (!a_player || !profile || !profile->AttachPoint || a_match.CurrentType >= profile->Types.size())
@@ -878,8 +881,21 @@ namespace OModSwitch
             {
                 REX::INFO("Ammo switch: profile '{}' changed ammo {:08X} -> {:08X}", profile->Id,
                     currentType->Ammo->GetFormID(), nextType.Ammo->GetFormID());
-                RequestAmmoReload(
-                    a_player, a_weapon.Base, const_cast<RE::TESAmmo*>(nextType.Ammo), a_pipboyReloadAnimation);
+                if (a_automaticSwitch && ManualReload::IsManualReloadRequired(a_weapon.Base, a_weapon.Instance))
+                {
+                    if (const auto live = Core::GetEquippedWeapon(a_player); live && live->Data)
+                    {
+                        live->Data->ammo = const_cast<RE::TESAmmo*>(nextType.Ammo);
+                        live->Data->ammoCount = 0;
+                    }
+                    QueueWeaponCardRefresh();
+                    REX::INFO("Ammo switch: manual reload governs the newly selected ammo");
+                }
+                else
+                {
+                    RequestAmmoReload(
+                        a_player, a_weapon.Base, const_cast<RE::TESAmmo*>(nextType.Ammo), a_pipboyReloadAnimation);
+                }
             }
             else
             {
@@ -909,7 +925,8 @@ namespace OModSwitch
                 if (a_category == WeaponConfig::OModCategory::Ammunition)
                     REX::INFO("Ammo switch: equipped weapon {:08X}, current ammo {:08X}",
                         weapon->Base->GetFormID(), currentAmmo ? currentAmmo->GetFormID() : 0);
-                if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo))
+                if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(
+                        currentAmmo, weapon->Base ? weapon->Base->weaponData.ammo : nullptr))
                 {
                     const bool requestedAmmoProfile = a_category == WeaponConfig::OModCategory::Ammunition ||
                         (!a_keyID.empty() && ammoMatch->Profile->KeyID == a_keyID);
@@ -1449,6 +1466,76 @@ namespace OModSwitch
         }
     }
 
+    bool HasAvailableAmmoSwitchTarget(
+        RE::PlayerCharacter* a_player,
+        const RE::BGSObjectInstanceT<RE::TESObjectWEAP>& a_weapon)
+    {
+        if (!Settings::AutoSwitchAmmoWhenEmpty() || !a_player || !a_weapon.object)
+            return false;
+
+        const auto live = Core::GetEquippedWeapon(a_player);
+        const auto* base = a_weapon.object->As<RE::TESObjectWEAP>();
+        if (!base)
+            return false;
+        if (!live || live->Base != base || !live->Data || live->Data->ammoCount != 1)
+            return false;
+
+        const auto* instance = static_cast<const RE::TESObjectWEAP::InstanceData*>(a_weapon.instanceData.get());
+        const auto* currentAmmo = instance && instance->ammo ? instance->ammo : base->weaponData.ammo;
+        const auto match = WeaponConfig::MatchAmmoSwitch(currentAmmo, base->weaponData.ammo);
+        if (!match || !match->Profile)
+            return false;
+
+        const auto& types = match->Profile->Types;
+        for (std::size_t offset = 1; offset < types.size(); ++offset)
+        {
+            const auto index = (match->CurrentType + offset) % types.size();
+            std::uint32_t count = 0;
+            a_player->GetItemCount(count, const_cast<RE::TESAmmo*>(types[index].Ammo), false);
+            if (count > 0)
+                return true;
+        }
+        return false;
+    }
+
+    void OnAmmoDepleted(RE::TESObjectWEAP* a_weapon, const RE::TESObjectWEAP::InstanceData* a_instance)
+    {
+        if (!Settings::AutoSwitchAmmoWhenEmpty() || !a_weapon || !a_instance)
+            return;
+
+        const auto* tasks = F4SE::GetTaskInterface();
+        if (!tasks)
+            return;
+
+        tasks->AddTask([a_weapon, a_instance]() {
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            const auto live = Core::GetEquippedWeapon(player);
+            if (!player || !live || live->Base != a_weapon || !live->Item || !live->Data ||
+                live->Item->item.instanceData.get() != a_instance || live->Data->ammoCount != 0)
+                return;
+
+            const auto* currentAmmo = live->Instance->ammo ? live->Instance->ammo : a_weapon->weaponData.ammo;
+            const auto match = WeaponConfig::MatchAmmoSwitch(currentAmmo, a_weapon->weaponData.ammo);
+            if (!match)
+                return;
+
+            REX::INFO("Ammo switch: magazine depleted for weapon {:08X}; switching to the next available configured ammo",
+                a_weapon->GetFormID());
+            if (!SwitchAmmoOnGameThread(player, *live, *match, std::nullopt, true, true))
+            {
+                REX::INFO("Ammo switch: automatic switch did not find or apply another available ammo type");
+                const auto currentWeapon = Core::GetEquippedWeapon(player);
+                if (currentWeapon && currentWeapon->Base == a_weapon && currentWeapon->Instance &&
+                    !ManualReload::IsManualReloadRequired(currentWeapon->Base, currentWeapon->Instance))
+                {
+                    const auto* ammo = currentWeapon->Instance->ammo ? currentWeapon->Instance->ammo : a_weapon->weaponData.ammo;
+                    if (ammo)
+                        RequestAmmoReload(player, a_weapon, const_cast<RE::TESAmmo*>(ammo), true);
+                }
+            }
+        });
+    }
+
     void ResetPendingAmmoReload()
     {
         const std::scoped_lock lock{ pendingReloadLock };
@@ -1484,8 +1571,9 @@ namespace OModSwitch
         if (!weapon->Base || !weapon->Instance)
             return false;
         const auto* currentAmmo = weapon->Instance->ammo ? weapon->Instance->ammo : weapon->Base->weaponData.ammo;
-        const auto currentMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo);
-        const auto targetMatch = WeaponConfig::MatchAmmoSwitch(a_targetAmmo);
+        const auto* weaponBaseAmmo = weapon->Base->weaponData.ammo;
+        const auto currentMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo, weaponBaseAmmo);
+        const auto targetMatch = WeaponConfig::MatchAmmoSwitch(a_targetAmmo, weaponBaseAmmo);
         if (!currentMatch || !targetMatch || currentMatch->Profile != targetMatch->Profile)
         {
             REX::INFO("Ammo switch: Pip-Boy ammo {:08X} is not compatible with equipped weapon {:08X}; keeping vanilla cannot-equip response",
@@ -1531,7 +1619,7 @@ namespace OModSwitch
             if (!weapon)
                 continue;
             // The engine validates stored attachments during load, before the hotkey can add the slot.
-            if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(weapon->weaponData.ammo))
+            if (const auto ammoMatch = WeaponConfig::MatchAmmoSwitch(weapon->weaponData.ammo, weapon->weaponData.ammo))
             {
                 auto* attachPoint = ammoMatch->Profile->AttachPoint;
                 if (attachPoint && !weapon->attachParents.HasKeyword(attachPoint) &&
@@ -1564,7 +1652,9 @@ namespace OModSwitch
 
         const auto* ammo = weapon->Instance->ammo;
         const auto* cachedAmmo = weapon->Data->ammo;
-        if (!WeaponConfig::MatchAmmoSwitch(ammo) && !WeaponConfig::MatchAmmoSwitch(cachedAmmo))
+        const auto* weaponBaseAmmo = weapon->Base ? weapon->Base->weaponData.ammo : nullptr;
+        if (!WeaponConfig::MatchAmmoSwitch(ammo, weaponBaseAmmo) &&
+            !WeaponConfig::MatchAmmoSwitch(cachedAmmo, weaponBaseAmmo))
             return;
 
         REX::INFO("Ammo switch: after load weapon={:08X}, instanceAmmo={:08X}, cachedAmmo={:08X}, loaded={}",

@@ -1,0 +1,41 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_MiniNuke",
+      "weaponBaseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x000E6B2E"
+      },
+      "baseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x000E6B2E"
+      },
+      "baseOMod": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x001C6C03"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000B826F"
+          },
+          "omod": {
+            "plugin": "Fallout4.esm",
+            "formId": "0x001AC24C"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "DLCNukaWorld.esm",
+            "formId": "0x0001B039"
+          },
+          "omod": {
+            "plugin": "DLCNukaWorld.esm",
+            "formId": "0x0204E494"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -15,6 +15,7 @@
 #include "ManualReload.h"
 #include "Config/WeaponConfig.h"
 #include "Core/EquippedWeapon.h"
+#include "Core/OModSwitch.h"
 #include "Settings/Settings.h"
 
 namespace
@@ -104,7 +105,7 @@ namespace
         static std::uint32_t Thunk(RE::PlayerCharacter* Player, const RE::BGSObjectInstanceT<RE::TESObjectWEAP>& Weapon, std::uint32_t EquipIndex, std::uint32_t Flags)
         {
             const bool Manual = ManualFor(Weapon);
-            SkipAutoReload = Manual;
+            SkipAutoReload = Manual || OModSwitch::HasAvailableAmmoSwitchTarget(Player, Weapon);
             const auto Remaining = Original(Player, Weapon, EquipIndex, Flags);
             SkipAutoReload = false;
 
@@ -191,6 +192,13 @@ namespace
 
 namespace ManualReload
 {
+    bool IsManualReloadRequired(
+        RE::TESObjectWEAP* a_weapon,
+        const RE::TESObjectWEAP::InstanceData* a_instance)
+    {
+        return ManualFor(a_weapon, a_instance);
+    }
+
     void Install()
     {
         REL::Relocation<std::uintptr_t> Vtable{ RE::VTABLE::PlayerCharacter[0] };

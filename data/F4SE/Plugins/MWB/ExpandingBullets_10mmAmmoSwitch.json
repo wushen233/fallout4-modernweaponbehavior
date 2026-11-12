@@ -81,7 +81,11 @@
             "formId": "0x0012B915"
           }
         }
-      ]
+      ],
+      "weaponBaseAmmo": {
+        "plugin": "Fallout4.esm",
+        "formId": "0x0001F276"
+      }
     }
   ]
 }

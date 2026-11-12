@@ -1,0 +1,41 @@
+{
+  "ammoSwitchProfiles": [
+    {
+      "id": "ExpandingBullets.MR_Harpoon",
+      "weaponBaseAmmo": {
+        "plugin": "DLCCoast.esm",
+        "formId": "0x00010B80"
+      },
+      "baseAmmo": {
+        "plugin": "DLCCoast.esm",
+        "formId": "0x00010B80"
+      },
+      "baseOMod": {
+        "plugin": "DLCCoast.esm",
+        "formId": "0x00037CFB"
+      },
+      "ammoTypes": [
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000EFAC9"
+          },
+          "omod": {
+            "plugin": "DLCCoast.esm",
+            "formId": "0x00037CFD"
+          }
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000EFACA"
+          },
+          "omod": {
+            "plugin": "DLCCoast.esm",
+            "formId": "0x00037CFC"
+          }
+        }
+      ]
+    }
+  ]
+}

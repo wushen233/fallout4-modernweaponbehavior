@@ -132,6 +132,7 @@ namespace
         std::string Id;
         std::optional<std::string> KeyID;
         OModReferenceOptions BaseAmmo;
+        std::optional<OModReferenceOptions> WeaponBaseAmmo;
         std::optional<OModReferenceOptions> BaseOMod;
         std::vector<AmmoSwitchTypeOptions> AmmoTypes;
     };
@@ -215,8 +216,8 @@ template <>
 struct glz::meta<AmmoSwitchProfileOptions>
 {
     using T = AmmoSwitchProfileOptions;
-    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "baseAmmo", &T::BaseAmmo, "baseOMod", &T::BaseOMod,
-        "ammoTypes", &T::AmmoTypes);
+    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "baseAmmo", &T::BaseAmmo,
+        "weaponBaseAmmo", &T::WeaponBaseAmmo, "baseOMod", &T::BaseOMod, "ammoTypes", &T::AmmoTypes);
 };
 
 template <>
@@ -548,7 +549,7 @@ namespace
         const RE::TESAmmo* BaseAmmo{ nullptr };
         std::size_t TypeIndex{ 0 };
     };
-    std::unordered_map<const RE::TESAmmo*, AmmoSwitchLookup>                    AmmoSwitchLookups;
+    std::unordered_map<const RE::TESAmmo*, std::vector<AmmoSwitchLookup>>        AmmoSwitchLookups;
     std::atomic<std::uint32_t>                                                   ConfigGeneration{ 0 };
 
     [[nodiscard]] bool IsExcluded(Feature TargetFeature, RE::TESObjectWEAP* Base, const RE::TESObjectWEAP::InstanceData* Instance)
@@ -1503,7 +1504,16 @@ namespace
         if (!BaseAmmo)
             return;
 
-        WeaponConfig::AmmoSwitchProfile Profile{ .Id = Options.Id, .KeyID = Options.KeyID.value_or(std::string{}) };
+        const auto WeaponBaseAmmo = Options.WeaponBaseAmmo ?
+            ParseAmmoReference(*Options.WeaponBaseAmmo, std::format("{} weaponBaseAmmo", Where)) : nullptr;
+        if (Options.WeaponBaseAmmo && !WeaponBaseAmmo)
+            return;
+
+        WeaponConfig::AmmoSwitchProfile Profile{
+            .Id = Options.Id,
+            .KeyID = Options.KeyID.value_or(std::string{}),
+            .WeaponBaseAmmo = WeaponBaseAmmo
+        };
         const auto AddType = [&](const OModReferenceOptions& AmmoReference, const std::optional<OModReferenceOptions>& OModReference,
                                  std::string_view TypeWhere) -> bool
         {
@@ -1575,10 +1585,19 @@ namespace
         }
         for (const auto& Type : Profile.Types)
         {
-            if (AmmoSwitchLookups.contains(Type.Ammo))
+            const auto Existing = AmmoSwitchLookups.find(Type.Ammo);
+            if (Existing == AmmoSwitchLookups.end())
+                continue;
+
+            const bool DuplicateContext = std::ranges::any_of(Existing->second, [&](const auto& Lookup) {
+                const auto ExistingProfile = AmmoSwitchProfiles.find(Lookup.BaseAmmo);
+                return ExistingProfile == AmmoSwitchProfiles.end() ||
+                    ExistingProfile->second.WeaponBaseAmmo == WeaponBaseAmmo;
+            });
+            if (DuplicateContext)
             {
-                REX::WARN("  {}: ammo {:08X} already belongs to another profile; profile '{}' ignored", Where,
-                    Type.Ammo->GetFormID(), Options.Id);
+                REX::WARN("  {}: ammo {:08X} already has a profile for weapon base ammo {:08X}; profile '{}' ignored", Where,
+                    Type.Ammo->GetFormID(), WeaponBaseAmmo ? WeaponBaseAmmo->GetFormID() : 0u, Options.Id);
                 return;
             }
         }
@@ -1587,7 +1606,8 @@ namespace
         if (!Inserted)
             return;
         for (std::size_t i = 0; i < It->second.Types.size(); ++i)
-            AmmoSwitchLookups.emplace(It->second.Types[i].Ammo, AmmoSwitchLookup{ .BaseAmmo = BaseAmmo, .TypeIndex = i });
+            AmmoSwitchLookups[It->second.Types[i].Ammo].push_back(
+                AmmoSwitchLookup{ .BaseAmmo = BaseAmmo, .TypeIndex = i });
         REX::INFO("  {}: loaded ammo switch profile '{}' with {} type(s){}", Where, It->second.Id, It->second.Types.size(),
             It->second.KeyID.empty() ? "" : std::format(", keyID '{}'", It->second.KeyID));
     }
@@ -2190,7 +2210,7 @@ namespace WeaponConfig
         return OModSwitchRules.Match(Base, Instance).value_or(std::vector<OModSwitchGroup>{});
     }
 
-    std::optional<AmmoSwitchMatch> MatchAmmoSwitch(const RE::TESAmmo* Ammo)
+    std::optional<AmmoSwitchMatch> MatchAmmoSwitch(const RE::TESAmmo* Ammo, const RE::TESAmmo* WeaponBaseAmmo)
     {
         if (!Ammo)
             return std::nullopt;
@@ -2199,11 +2219,39 @@ namespace WeaponConfig
         if (Lookup == AmmoSwitchLookups.end())
             return std::nullopt;
 
-        const auto Profile = AmmoSwitchProfiles.find(Lookup->second.BaseAmmo);
-        if (Profile == AmmoSwitchProfiles.end() || Lookup->second.TypeIndex >= Profile->second.Types.size())
+        const AmmoSwitchLookup* Exact = nullptr;
+        const AmmoSwitchLookup* Unscoped = nullptr;
+        for (const auto& Candidate : Lookup->second)
+        {
+            const auto Profile = AmmoSwitchProfiles.find(Candidate.BaseAmmo);
+            if (Profile == AmmoSwitchProfiles.end() || Candidate.TypeIndex >= Profile->second.Types.size())
+                continue;
+
+            if (Profile->second.WeaponBaseAmmo)
+            {
+                if (Profile->second.WeaponBaseAmmo != WeaponBaseAmmo)
+                    continue;
+                if (Exact)
+                    return std::nullopt;
+                Exact = &Candidate;
+            }
+            else
+            {
+                if (Unscoped)
+                    return std::nullopt;
+                Unscoped = &Candidate;
+            }
+        }
+
+        const auto* Selected = Exact ? Exact : Unscoped;
+        if (!Selected)
             return std::nullopt;
 
-        return AmmoSwitchMatch{ .Profile = &Profile->second, .CurrentType = Lookup->second.TypeIndex };
+        const auto Profile = AmmoSwitchProfiles.find(Selected->BaseAmmo);
+        if (Profile == AmmoSwitchProfiles.end())
+            return std::nullopt;
+
+        return AmmoSwitchMatch{ .Profile = &Profile->second, .CurrentType = Selected->TypeIndex };
     }
 
     std::vector<RE::BGSKeyword*> OModSwitchAttachPoints()

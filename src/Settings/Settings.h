@@ -41,6 +41,8 @@ namespace Settings
 
     [[nodiscard]] bool PipboyAmmoReloadAnimation();
 
+    [[nodiscard]] bool AutoSwitchAmmoWhenEmpty();
+
     [[nodiscard]] bool WeaponHUD();
 
     [[nodiscard]] bool AmmoCheckEveryGun();

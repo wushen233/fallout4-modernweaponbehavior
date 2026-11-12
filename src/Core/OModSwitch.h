@@ -34,6 +34,10 @@ namespace OModSwitch
     void ResetPendingSwitches();
     void ResetPendingAmmoReload();
     void TickPendingAmmoReload();
+    [[nodiscard]] bool HasAvailableAmmoSwitchTarget(
+        RE::PlayerCharacter* a_player,
+        const RE::BGSObjectInstanceT<RE::TESObjectWEAP>& a_weapon);
+    void OnAmmoDepleted(RE::TESObjectWEAP* a_weapon, const RE::TESObjectWEAP::InstanceData* a_instance);
 
     bool SetItemOMod(
         std::monostate,

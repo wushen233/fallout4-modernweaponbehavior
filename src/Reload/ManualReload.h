@@ -17,4 +17,7 @@
 namespace ManualReload
 {
     void Install();
+    [[nodiscard]] bool IsManualReloadRequired(
+        RE::TESObjectWEAP* a_weapon,
+        const RE::TESObjectWEAP::InstanceData* a_instance);
 }

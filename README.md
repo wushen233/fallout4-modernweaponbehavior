@@ -129,13 +129,14 @@ On `1.10.163` and `1.11.240`, muzzle and sight groups share the native inventory
 
 ## Ammo subtype switch profiles
 
-Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. They are matched by the equipped weapon instance's current ammo form, so weapons that use a configured ammo type do not need individual weapon entries. `baseAmmo` is the first cycle entry; each `ammoTypes` entry pairs an `ammo` form with the OMOD that applies it. `baseOMod` is optional when the base ammo is represented by having no OMOD at the ammo attach point. If provided, it is used when cycling back to the configured base state; a weapon already using that base ammo without the OMOD is also accepted as the initial state. An optional profile `keyID` lets an add-on's MCM hotkey select this ammo profile through `MWB.SwitchOModGroup`, alongside the legacy category hotkey.
+Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. They are matched by the equipped weapon instance's current ammo form, so weapons that use a configured ammo type do not need individual weapon entries. `baseAmmo` is the first cycle entry; each `ammoTypes` entry pairs an `ammo` form with the OMOD that applies it. `weaponBaseAmmo` optionally scopes a profile to weapons whose default ammo matches that form. Use it when the same ammo form appears in multiple profiles with different OMODs; MWB selects the profile matching the equipped weapon's default ammo. Profiles without this field remain global. `baseOMod` is optional when the base ammo is represented by having no OMOD at the ammo attach point. If provided, it is used when cycling back to the configured base state; a weapon already using that base ammo without the OMOD is also accepted as the initial state. An optional profile `keyID` lets an add-on's MCM hotkey select this ammo profile through `MWB.SwitchOModGroup`, alongside the legacy category hotkey.
 
 ```json
 {
   "ammoSwitchProfiles": [
     {
       "id": "example.10mm",
+      "weaponBaseAmmo": { "plugin": "Fallout4.esm", "formId": "0x0001F276" },
       "baseAmmo": { "plugin": "Fallout4.esm", "formId": "0x0001F276" },
       "baseOMod": { "plugin": "Example.esp", "formId": "0x00000800" },
       "ammoTypes": [
@@ -149,9 +150,9 @@ Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4
 }
 ```
 
-The configured OMODs must target weapons and share one valid attach point. Every alternate ammo type needs an OMOD; the base ammo may omit one. Duplicate ammo forms, duplicate OMODs, and duplicate base-ammo profiles are rejected with a warning. For weapons whose base ammo matches a profile, MWB registers the attach point before loading a save so the stored OMOD can be restored. The **Switch ammunition OMOD** hotkey requests a normal reload after a successful switch. If the game initially refuses it, MWB retries for up to two seconds while the same weapon and ammo are equipped and the magazine is empty. Queued switches are cancelled when a save starts loading. When no ammo profile matches, the hotkey continues to use the generic ammunition OMOD group if configured. A weapon with both kinds of configuration is refused as ambiguous.
+The configured OMODs must target weapons and share one valid attach point. Every alternate ammo type needs an OMOD; the base ammo may omit one. A repeated ammo form is allowed only when its profiles have different `weaponBaseAmmo` selectors; duplicate mappings for the same selector, duplicate OMODs within a profile, and duplicate base-ammo profiles are rejected with a warning. For weapons whose base ammo matches a profile, MWB registers the attach point before loading a save so the stored OMOD can be restored. The **Switch ammunition OMOD** hotkey requests a normal reload after a successful switch. If the game initially refuses it, MWB retries for up to two seconds while the same weapon and ammo are equipped and the magazine is empty. Queued switches are cancelled when a save starts loading. When no ammo profile matches, the hotkey continues to use the generic ammunition OMOD group if configured. A weapon with both kinds of configuration is refused as ambiguous.
 
-`data/F4SE/Plugins/MWB/ExpandingBullets_10mmAmmoSwitch.json` contains the first migrated profile from Expanding Bullets. It includes ammo/OMOD switching data only; loot generation and crafting data are intentionally omitted.
+The `ExpandingBullets_MR_<caliber>_AmmoSwitch.json` files contain the migrated MSF ammo profiles, split by the original caliber files; the 10mm profile remains in `ExpandingBullets_10mmAmmoSwitch.json`. Together these files contain 61 profiles and 224 alternate ammo entries. Each profile uses `weaponBaseAmmo` to scope it to its source ammo family, allowing a shared ammo form to have different OMOD mappings on different weapon families. Loot generation and crafting data are intentionally omitted. One 5.45mm alternate entry (`MunitionsReloaded.esp|CD808`) is left out because its source maps it to the same OMOD as another alternate in that profile, which cannot represent two distinct ammo states through one installed OMOD.
 
 Ammo subtype profiles use the native inventory and equip refresh on `1.10.163` and `1.11.240`. These runtimes require a matching Address Library and the expected equip call site. Other runtimes use the existing in-place refresh.
 

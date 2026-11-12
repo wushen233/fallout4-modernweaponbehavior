@@ -4,7 +4,16 @@ set_config("commonlib_ini", true)
 set_config("commonlib_json", true)
 set_config("commonlib_xbyak", true)
 
-includes("lib/commonlibf4")
+local commonlibf4_path = os.getenv("COMMONLIBF4_PATH")
+local commonlibf4_profile = os.getenv("COMMONLIBF4_PROFILE")
+if commonlibf4_path and commonlibf4_path ~= "" then
+    includes(commonlibf4_path)
+    if commonlibf4_profile and commonlibf4_profile ~= "" then
+        print("[commonlibf4] profile=" .. commonlibf4_profile)
+    end
+else
+    includes("lib/commonlibf4")
+end
 
 set_project("Modern Weapon Behavior")
 set_version("2.5.0")
