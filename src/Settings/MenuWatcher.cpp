@@ -13,6 +13,7 @@
 */
 
 #include "Settings.h"
+#include "Hooks/InputHandler.h"
 
 namespace
 {
@@ -25,6 +26,7 @@ namespace
             if (Event.opening || Event.menuName != "PauseMenu"sv)
                 return RE::BSEventNotifyControl::kContinue;
 
+            Hooks::ReloadOModKeybinds();
             const auto Pending = Settings::Reload();
             std::string PendingList;
 

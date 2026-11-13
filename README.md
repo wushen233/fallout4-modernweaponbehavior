@@ -123,6 +123,8 @@ To register an add-on hotkey, give it a unique ID in that add-on's `MCM/Config/<
 
 The hotkey control in `config.json` must use the same ID. The registered keybind ID must exactly match the configured `keyID`; IDs are case-sensitive and should be unique across switch groups, ammo profiles, and fire-mode rules on a weapon. Keep the built-in category keybinds for compatibility, or use unique add-on IDs when a weapon needs multiple independently switchable controls in one category. The generic Papyrus entry routes fire-mode IDs through MWB's existing animation-aware switch event.
 
+MWB's built-in muzzle, sight, ammunition, and underbarrel category hotkeys are read from MCM's `Data/MCM/Settings/Keybinds.json` and dispatched by the native C++ input handler. Their MCM actions are no-op placeholders so the switch does not depend on Papyrus. Custom add-on key IDs continue to use the Papyrus entry shown above.
+
 The attach point is injected into configured weapon records at data-ready time so the engine can construct the selected OMOD instance. On `1.10.163` and `1.11.240`, switching an equipped weapon that shares a stack splits off the equipped copy and transfers the equipped state before applying the OMOD. Other runtimes fail closed for stacked equipped weapons rather than applying the change to every copy in the stack.
 
 On `1.10.163` and `1.11.240`, muzzle and sight groups share the native inventory and equip refresh used by ammo subtype switching. Switch while the weapon is drawn and idle, with ADS released. These groups preserve the loaded round count and reject changes to the weapon's ammo type or magazine capacity. `10mmMuzzleSwitchTest.json` configures the standard muzzle, suppressor, iron sights and reflex sight for testing.

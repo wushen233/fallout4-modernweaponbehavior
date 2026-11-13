@@ -32,36 +32,32 @@
       "id": "MWBMCMHKSwitchMuzzleOMod",
       "desc": "$MWB_MCM_Switch_muzzle_OMOD",
       "action": {
-        "type": "CallGlobalFunction",
-        "script": "MWB",
-        "function": "SwitchMuzzleOMod"
+        "type": "RunConsoleCommand",
+        "command": ""
       }
     },
     {
       "id": "MWBMCMHKSwitchSightOMod",
       "desc": "$MWB_MCM_Switch_sight_OMOD",
       "action": {
-        "type": "CallGlobalFunction",
-        "script": "MWB",
-        "function": "SwitchSightOMod"
+        "type": "RunConsoleCommand",
+        "command": ""
       }
     },
     {
       "id": "MWBMCMHKSwitchAmmunitionOMod",
       "desc": "$MWB_MCM_Switch_ammunition_OMOD",
       "action": {
-        "type": "CallGlobalFunction",
-        "script": "MWB",
-        "function": "SwitchAmmunitionOMod"
+        "type": "RunConsoleCommand",
+        "command": ""
       }
     },
     {
       "id": "MWBMCMHKSwitchUnderbarrelOMod",
       "desc": "$MWB_MCM_Switch_underbarrel_OMOD",
       "action": {
-        "type": "CallGlobalFunction",
-        "script": "MWB",
-        "function": "SwitchUnderbarrelOMod"
+        "type": "RunConsoleCommand",
+        "command": ""
       }
     }
   ]

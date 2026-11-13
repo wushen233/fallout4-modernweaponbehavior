@@ -17,4 +17,5 @@
 namespace Hooks
 {
     void InstallInputHandler();
+    void ReloadOModKeybinds();
 }
