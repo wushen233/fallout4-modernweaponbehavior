@@ -123,7 +123,7 @@ To register an add-on hotkey, give it a unique ID in that add-on's `MCM/Config/<
 
 The hotkey control in `config.json` must use the same ID. The registered keybind ID must exactly match the configured `keyID`; IDs are case-sensitive and should be unique across switch groups, ammo profiles, and fire-mode rules on a weapon. Keep the built-in category keybinds for compatibility, or use unique add-on IDs when a weapon needs multiple independently switchable controls in one category. The generic Papyrus entry routes fire-mode IDs through MWB's existing animation-aware switch event.
 
-The attach point is injected into configured weapon records at data-ready time so the engine can construct the selected OMOD instance. Generic OMOD switching currently requires the equipped weapon instance to be uniquely resolvable; unsupported or ambiguous stacks fail without changing the weapon.
+The attach point is injected into configured weapon records at data-ready time so the engine can construct the selected OMOD instance. On `1.10.163` and `1.11.240`, switching an equipped weapon that shares a stack splits off the equipped copy and transfers the equipped state before applying the OMOD. Other runtimes fail closed for stacked equipped weapons rather than applying the change to every copy in the stack.
 
 On `1.10.163` and `1.11.240`, muzzle and sight groups share the native inventory and equip refresh used by ammo subtype switching. Switch while the weapon is drawn and idle, with ADS released. These groups preserve the loaded round count and reject changes to the weapon's ammo type or magazine capacity. `10mmMuzzleSwitchTest.json` configures the standard muzzle, suppressor, iron sights and reflex sight for testing.
 
@@ -154,7 +154,7 @@ The configured OMODs must target weapons and share one valid attach point. Every
 
 The `ExpandingBullets_MR_<caliber>_AmmoSwitch.json` files contain the migrated MSF ammo profiles, split by the original caliber files; the 10mm profile remains in `ExpandingBullets_10mmAmmoSwitch.json`. Together these files contain 61 profiles and 224 alternate ammo entries. Each profile uses `weaponBaseAmmo` to scope it to its source ammo family, allowing a shared ammo form to have different OMOD mappings on different weapon families. Loot generation and crafting data are intentionally omitted. One 5.45mm alternate entry (`MunitionsReloaded.esp|CD808`) is left out because its source maps it to the same OMOD as another alternate in that profile, which cannot represent two distinct ammo states through one installed OMOD.
 
-Ammo subtype profiles use the native inventory and equip refresh on `1.10.163` and `1.11.240`. These runtimes require a matching Address Library and the expected equip call site. Other runtimes use the existing in-place refresh.
+Ammo subtype profiles use the native inventory and equip refresh on `1.10.163` and `1.11.240`. These runtimes require a matching Address Library and the expected equip call site. The equipped copy is split from a multi-copy stack on these runtimes before its ammo OMOD is changed. Other runtimes use the existing in-place refresh for single-copy stacks and reject stacked equipped weapons because they cannot safely isolate one copy.
 
 ## Supported Runtimes
 

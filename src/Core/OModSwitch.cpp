@@ -766,9 +766,14 @@ namespace OModSwitch
 
             const auto stackIndex = static_cast<std::uint32_t>(stackID);
             auto* stack = GetStack(item, stackIndex);
-            if (!stack || !stack->extra || stack->count > 1)
+            if (!stack)
             {
-                REX::WARN("Ammo switch: equipped weapon stack is missing instance data or shares {} copies", stack ? stack->count : 0);
+                REX::WARN("Ammo switch: equipped weapon stack {} could not be resolved", stackIndex);
+                return false;
+            }
+            if (stack->count > 1 && (!nativeOModRefreshAvailable || !nativeStackWriter.address()))
+            {
+                REX::WARN("Ammo switch: runtime cannot safely split the equipped weapon from a stack of {} copies", stack->count);
                 return false;
             }
 
@@ -804,7 +809,7 @@ namespace OModSwitch
             }
 
             auto* stackInstanceData = item->GetInstanceData(stackIndex);
-            auto* extraInstance = stack->extra->GetByType<RE::ExtraInstanceData>();
+            auto* extraInstance = stack->extra ? stack->extra->GetByType<RE::ExtraInstanceData>() : nullptr;
             auto* extraInstanceData = extraInstance ? extraInstance->data.get() : nullptr;
             const auto instanceAmmoID = [](RE::TBO_InstanceData* a_instanceData) {
                 const auto* weaponInstance = static_cast<RE::TESObjectWEAP::InstanceData*>(a_instanceData);
@@ -1001,10 +1006,31 @@ namespace OModSwitch
             }
             const auto stackIndex = static_cast<std::uint32_t>(stackID);
             auto* stack = GetStack(item, stackIndex);
-            if (!stack || !stack->extra || stack->count > 1)
+            if (!stack)
             {
-                REX::WARN("OMod switch: equipped weapon stack is missing instance data or shares {} copies", stack ? stack->count : 0);
+                REX::WARN("OMod switch: equipped weapon stack {} could not be resolved", stackIndex);
                 return;
+            }
+            const bool splitStack = stack->count > 1;
+            const bool refreshForSplit = nativeOModRefreshAvailable && splitStack;
+            if (splitStack && !refreshForSplit)
+            {
+                REX::WARN("OMod switch: runtime cannot safely split the equipped weapon from a stack of {} copies", stack->count);
+                return;
+            }
+            if (refreshForSplit && !refreshEquipped)
+            {
+                const auto gunState = Core::GetGunState(player);
+                const bool thirdPerson = player->Is3rdPersonVisible();
+                const bool ready = gunState == RE::GUN_STATE::kDrawn ||
+                    Core::IsThirdPersonReadyStance(player, gunState);
+                if (!ready || player->meleeAttackState != 0 ||
+                    (thirdPerson && (!player->GetWeaponMagicDrawn() || SightedReload::AimButtonHeld())))
+                {
+                    REX::INFO("OMod switch: lower the sights and finish the current weapon action before splitting the equipped stack (gun state {}, third person {})",
+                        std::to_underlying(gunState), thirdPerson);
+                    return;
+                }
             }
 
             RE::BGSMod::Attachment::Mod* current = nullptr;
@@ -1046,7 +1072,7 @@ namespace OModSwitch
                 REX::INFO("OMod switch: group '{}' has only one active candidate", selected->Id);
                 return;
             }
-            if (refreshEquipped)
+            if (refreshEquipped || refreshForSplit)
             {
                 if (ApplyEquippedOModTransition(player, weapon->Base, stackID, current, next))
                 {
@@ -1372,21 +1398,27 @@ namespace OModSwitch
                     const auto index = stackIndex();
                     auto* item = FindInventoryItem(a_owner, a_itemForm);
                     auto* stack = index >= 0 ? GetStack(item, static_cast<std::uint32_t>(index)) : nullptr;
-                    if (!stack || stack->count != 1)
+                    if (!stack)
                         return false;
+                    const auto stackCountBefore = stack->count;
 
                     RE::BGSInventoryItem::CheckStackIDFunctor compare{ static_cast<std::uint32_t>(index) };
                     bool accepted = false;
                     RE::BGSInventoryItem::ModifyModDataFunctor write{ a_mod, 0, a_attach, &accepted };
-                    write.shouldSplitStacks = false;
+                    write.shouldSplitStacks = true;
+                    write.transferEquippedToSplitStack = true;
                     // Both verified runtimes dereference the final argument.
                     auto ownerHandle = a_owner->GetHandle().get_handle();
                     if (!ownerHandle)
                         return false;
                     const bool found = nativeStackWriter(item, compare, write, false, &ownerHandle);
-                    const bool applied = stackIndex() >= 0 && hasMod(a_mod) == a_attach;
-                    REX::INFO("OMod switch: native stack write {:08X}, attach={}, found={}, accepted={}, applied={}",
-                        a_mod->GetFormID(), a_attach, found, accepted, applied);
+                    const auto resultingIndex = stackIndex();
+                    auto* resultingStack = resultingIndex >= 0 ? GetStack(item, static_cast<std::uint32_t>(resultingIndex)) : nullptr;
+                    const bool splitEquippedStack = stackCountBefore <= 1 || (resultingStack && resultingStack->count == 1);
+                    const bool applied = resultingIndex >= 0 && splitEquippedStack && hasMod(a_mod) == a_attach;
+                    REX::INFO("OMod switch: native stack write {:08X}, attach={}, found={}, accepted={}, applied={}, equippedIndex={} -> {}, count={} -> {}",
+                        a_mod->GetFormID(), a_attach, found, accepted, applied, index, resultingIndex, stackCountBefore,
+                        resultingStack ? resultingStack->count : 0);
                     return found && accepted && applied;
                 };
                 bool triedEquip = false;
