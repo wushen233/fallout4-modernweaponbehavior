@@ -17,6 +17,7 @@
 #include "Actions/WeaponActions.h"
 #include "Arm/ArmAnimations.h"
 #include "Arm/ArmSpace.h"
+#include "Fire/FusionCharge.h"
 #include "Melee/HoldBlock.h"
 #include "Reload/BoltChargeResync.h"
 #include "Reload/DropUnspentAmmo.h"
@@ -84,6 +85,9 @@ namespace
             if (Reload::Refuse(*SentEvent))
                 return false;
 
+            if (FusionCharge::Refuse(*SentEvent))
+                return false;
+
             if (const auto Replacement = WeaponActions::Replace(*SentEvent))
             {
                 if (Original(This, *Replacement))
@@ -148,6 +152,7 @@ namespace
                 Accepted = true;
             HoldBlock::OnEventSent(*SentEvent, Accepted);
             SprintFire::OnEventSent(*SentEvent, Accepted);
+            FusionCharge::OnEventSent(*SentEvent, Accepted);
             Reload::TraceSent(*SentEvent, Accepted, "NotifyAnimationGraphImpl"sv);
 
             return Accepted;

@@ -16,7 +16,7 @@ else
 end
 
 set_project("Modern Weapon Behavior")
-set_version("2.5.0")
+set_version("2.6.0")
 set_license("GPL-3.0")
 set_languages("c++23")
 set_warnings("allextra")

@@ -15,6 +15,7 @@
 #include "Papyrus.h"
 #include "Core/EquippedWeapon.h"
 #include "Core/OModSwitch.h"
+#include "Animation/DynamicLoop.h"
 #include "HUD/AmmoCheckDisplay.h"
 #include "Weapon/FireMode.h"
 #include "Settings/Settings.h"
@@ -60,6 +61,21 @@ namespace
     bool StopArmAnimation(GlobalFunctionSelf)
     {
         return Send("MWB_ArmStop");
+    }
+
+    bool EndDynamicLoop(GlobalFunctionSelf, RE::Actor* Actor)
+    {
+        return DynamicLoop::End(Actor) > 0;
+    }
+
+    bool ReleaseDynamicLoop(GlobalFunctionSelf, RE::Actor* Actor)
+    {
+        return DynamicLoop::Release(Actor) > 0;
+    }
+
+    bool IsDynamicLoopActive(GlobalFunctionSelf, RE::Actor* Actor)
+    {
+        return DynamicLoop::Looping(Actor);
     }
 
     bool SwitchFireMode(GlobalFunctionSelf)
@@ -114,7 +130,7 @@ namespace Papyrus
 
         if (!PapyrusInterface)
         {
-            REX::WARN("No F4SE Papyrus interface: MWB.Inspect, MWB.AmmoCheck, MWB.SpecialAttack, MWB.StopArmAnimation and MWB.SwitchFireMode will not exist");
+            REX::WARN("No F4SE Papyrus interface: MWB.Inspect, MWB.AmmoCheck, MWB.SpecialAttack, MWB.StopArmAnimation, MWB.SwitchFireMode and the dynamic loop functions will not exist");
             return;
         }
 
@@ -135,6 +151,9 @@ namespace Papyrus
             VM->BindNativeMethod(ScriptName, "SwitchOModGroup", SwitchOModGroup);
             if (!OModSwitch::RegisterPapyrusFunctions(VM))
                 return false;
+            VM->BindNativeMethod(ScriptName, "EndDynamicLoop", EndDynamicLoop);
+            VM->BindNativeMethod(ScriptName, "ReleaseDynamicLoop", ReleaseDynamicLoop);
+            VM->BindNativeMethod(ScriptName, "IsDynamicLoopActive", IsDynamicLoopActive);
             REX::INFO("Papyrus functions registered on \"{}\"", ScriptName);
 
             return true;

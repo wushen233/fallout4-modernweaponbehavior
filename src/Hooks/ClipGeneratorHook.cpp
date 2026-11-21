@@ -13,6 +13,7 @@
 */
 
 #include "ClipGeneratorHook.h"
+#include "Animation/DynamicLoop.h"
 #include "Magic/MagicAnnotations.h"
 #include "Arm/ArmSpace.h"
 #include "Weapon/AimDownSight.h"
@@ -437,6 +438,7 @@ namespace
 
             const auto Character = Context ? Read<const void*>(Context, 0) : nullptr;
             MagicAnnotations::OnClipActivated(Clip, Character);
+            DynamicLoop::OnClipActivated(Clip, Character);
 
             if (!IsPlayerCharacter(Character))
             {
@@ -500,7 +502,15 @@ namespace
                 BeforeUpdate = Read<float>(Clip, ClipPlaybackSpeedOffset);
             }
 
+            const bool Looping = DynamicLoop::Tracking();
+
+            if (Looping)
+                Delta = DynamicLoop::BeforeUpdate(Clip, Delta);
+
             Original(Clip, Context, Delta);
+
+            if (Looping)
+                DynamicLoop::AfterUpdate(Clip);
 
             if (Playback == 1.0f)
             {
@@ -536,6 +546,9 @@ namespace
 
             ArmSpace::OnClipDeactivated(Clip);
             MagicAnnotations::OnClipDeactivated(Clip);
+
+            if (DynamicLoop::Tracking())
+                DynamicLoop::OnClipDeactivated(Clip);
             Original(Clip, Context);
         }
 
@@ -786,6 +799,19 @@ namespace Hooks
     float ClipLocalTime(const void* Clip)
     {
         return Read<float>(Clip, ClipLocalTimeOffset);
+    }
+
+    void SetClipLocalTime(void* Clip, float Time)
+    {
+        Field(Clip, ClipLocalTimeOffset) = Time;
+
+        if (const auto Control = Read<void*>(Clip, ClipAnimationControlOffset))
+            Field(Control, ControlLocalTimeOffset) = Time;
+    }
+
+    float ClipPlaybackSpeed(const void* Clip)
+    {
+        return Read<float>(Clip, ClipPlaybackSpeedOffset);
     }
 
     float ClipDuration(const void* Clip)

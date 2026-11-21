@@ -217,10 +217,17 @@ namespace
 
         auto& Words = At<HavokArray>(Values, WordValuesOffset);
 
-        if (Names.Size != Infos.Size || Names.Size != Words.Size)
+        if (Names.Size != Infos.Size || Words.Size < Names.Size)
         {
             REX::WARN("Behavior names: '{}' has {} variable names, {} infos and {} values; variables left out", GraphName, Names.Size, Infos.Size, Words.Size);
             return 0;
+        }
+
+        if (Words.Size > Names.Size)
+        {
+            REX::INFO("Behavior names: '{}' has {} variable value(s) past its {} variables, without a name; dropped", GraphName, Words.Size - Names.Size,
+                Names.Size);
+            Words.Size = Names.Size;
         }
 
         const auto Count = static_cast<std::int32_t>(Missing.size());

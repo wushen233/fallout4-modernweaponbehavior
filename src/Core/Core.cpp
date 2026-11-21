@@ -16,15 +16,18 @@
 #include "Core/OModSwitch.h"
 #include "Actions/FirstPerson.h"
 #include "Actions/WeaponActions.h"
+#include "Animation/DynamicLoop.h"
 #include "Magic/MagicAnnotations.h"
 #include "Arm/ArmAnimations.h"
 #include "Arm/ArmSpace.h"
 #include "Behavior/NameInjection.h"
 #include "Config/WeaponConfig.h"
 #include "Fire/AmmoFire.h"
+#include "Fire/FusionCharge.h"
 #include "HUD/AmmoCheckDisplay.h"
 #include "HUD/WeaponHUD.h"
 #include "Hooks/AnimationEventHook.h"
+#include "Hooks/AttackButtonHook.h"
 #include "Hooks/ClipGeneratorHook.h"
 #include "Hooks/GraphGenerateHook.h"
 #include "Hooks/IdleStartHook.h"
@@ -158,6 +161,7 @@ namespace Core
         Hooks::InstallUpdateAnimationHook();
         Hooks::InstallActorUpdateAnimationHook();
         Hooks::InstallInputHandler();
+        Hooks::InstallAttackButtonHook();
         AmmoFire::Install();
         ArmSpace::Install();
         Hooks::InstallGraphGenerateHook();
@@ -180,6 +184,8 @@ namespace Core
         Reload::Abort("loading a save");
         WeaponGraphSights::Reset();
         Hooks::ForgetClips();
+        DynamicLoop::Reset();
+        FusionCharge::Reset();
         MagicAnnotations::Reset();
         SightedReload::Reset();
         SightedBoltCharge::Reset();
