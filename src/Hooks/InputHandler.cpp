@@ -14,6 +14,7 @@
 
 #include "InputHandler.h"
 #include "Core/OModSwitch.h"
+#include "HUD/AmmoSwitchWheel.h"
 #include "Melee/HoldBlock.h"
 #include "Reload/LoopReload.h"
 #include "Reload/SightedReload.h"
@@ -23,11 +24,13 @@
 #include <glaze/json.hpp>
 
 #include <RE/U/UI.h>
+#include <RE/T/ThumbstickEvent.h>
 
 #include <Windows.h>
 #undef ERROR
 
 #include <fstream>
+#include <chrono>
 
 struct McmKeybind
 {
@@ -68,6 +71,17 @@ namespace
     };
 
     std::vector<OModHotkey> OModHotkeys;
+
+    struct PendingAmmoHotkey
+    {
+        std::uint32_t Keycode{ 0 };
+        std::chrono::steady_clock::time_point PressedAt;
+        bool WheelAttempted{ false };
+        bool WheelOpened{ false };
+    };
+
+    std::optional<PendingAmmoHotkey> PendingAmmoSwitch;
+    constexpr auto AmmoWheelHoldThreshold = std::chrono::milliseconds(350);
 
     [[nodiscard]] std::uint32_t ReadModifiers()
     {
@@ -116,6 +130,47 @@ namespace
         }
     }
 
+    bool HandleAmmoSwitchHotkey(const RE::ButtonEvent& Event)
+    {
+        const auto keycode = GetMcmKeycode(Event);
+        if (!keycode || *keycode == 0)
+            return false;
+
+        if (Event.QJustPressed())
+        {
+            const auto modifiers = ReadModifiers();
+            const auto hotkey = std::ranges::find_if(OModHotkeys, [&](const auto& candidate) {
+                return candidate.Keycode == *keycode && candidate.Modifiers == modifiers &&
+                    candidate.Category == WeaponConfig::OModCategory::Ammunition;
+            });
+            if (hotkey == OModHotkeys.end())
+                return false;
+
+            PendingAmmoSwitch = PendingAmmoHotkey{ *keycode, std::chrono::steady_clock::now() };
+            return true;
+        }
+
+        if (!PendingAmmoSwitch || PendingAmmoSwitch->Keycode != *keycode)
+            return false;
+
+        if (Event.value != 0.0f)
+            return Event.QPressed();
+
+        const bool wheelWasOpened = PendingAmmoSwitch->WheelOpened || AmmoSwitchWheel::IsOpen();
+        PendingAmmoSwitch.reset();
+        if (wheelWasOpened)
+        {
+            if (!AmmoSwitchWheel::Confirm())
+            {
+                AmmoSwitchWheel::Cancel();
+                OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
+            }
+        }
+        else
+            OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
+        return true;
+    }
+
     class StopRequestHandler :
         public RE::PlayerInputHandler
     {
@@ -127,7 +182,38 @@ namespace
 
         bool ShouldHandleEvent(const RE::InputEvent* Event) override
         {
-            return Event && *Event->eventType == RE::INPUT_EVENT_TYPE::kButton;
+            if (!Event)
+                return false;
+            return *Event->eventType == RE::INPUT_EVENT_TYPE::kButton ||
+                (AmmoSwitchWheel::IsOpen() && *Event->eventType == RE::INPUT_EVENT_TYPE::kThumbstick);
+        }
+
+        void PerFrameUpdate() override
+        {
+            if (!PendingAmmoSwitch)
+                return;
+
+            const auto ui = RE::UI::GetSingleton();
+            if (ui && ui->GameIsPaused())
+            {
+                PendingAmmoSwitch.reset();
+                AmmoSwitchWheel::Cancel();
+                return;
+            }
+
+            if (!PendingAmmoSwitch->WheelAttempted &&
+                std::chrono::steady_clock::now() - PendingAmmoSwitch->PressedAt >= AmmoWheelHoldThreshold)
+            {
+                PendingAmmoSwitch->WheelAttempted = true;
+                PendingAmmoSwitch->WheelOpened = AmmoSwitchWheel::Open();
+            }
+        }
+
+        void OnThumbstickEvent(const RE::ThumbstickEvent* Event) override
+        {
+            if (!Event || Event->idCode != RE::ThumbstickEvent::kRight || !AmmoSwitchWheel::IsOpen())
+                return;
+            AmmoSwitchWheel::SetStickDirection(Event->xValue, Event->yValue);
         }
 
         void OnButtonEvent(const RE::ButtonEvent* Event) override
@@ -145,6 +231,9 @@ namespace
 
             ScopeSway::OnButton(*Event);
 
+            if (HandleAmmoSwitchHotkey(*Event))
+                return;
+
             if (!Event->QJustPressed())
                 return;
 
@@ -158,6 +247,12 @@ namespace
 
 namespace Hooks
 {
+    void ResetPendingOModHotkey()
+    {
+        PendingAmmoSwitch.reset();
+        AmmoSwitchWheel::Cancel();
+    }
+
     void ReloadOModKeybinds()
     {
         constexpr auto path = "Data/MCM/Settings/Keybinds.json";

@@ -37,6 +37,7 @@
 #include <RE/P/PlayerControls.h>
 #include <RE/U/UI.h>
 #include <RE/T/TESObjectREFR.h>
+#include <RE/T/TESFullName.h>
 #include <RE/T/TESObjectWEAP.h>
 
 #include <limits>
@@ -1736,6 +1737,86 @@ namespace OModSwitch
                 return;
             }
             CycleOnGameThread(std::nullopt, keyID);
+        });
+        return true;
+    }
+
+    std::vector<AmmoSwitchOption> GetEquippedAmmoSwitchOptions()
+    {
+        std::vector<AmmoSwitchOption> options;
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        const auto weapon = Core::GetEquippedWeapon(player);
+        if (!player || !weapon || !weapon->Base || !weapon->Instance)
+            return options;
+
+        const auto* currentAmmo = weapon->Instance->ammo ? weapon->Instance->ammo : weapon->Base->weaponData.ammo;
+        const auto match = WeaponConfig::MatchAmmoSwitch(currentAmmo, weapon->Base->weaponData.ammo);
+        if (!match || !match->Profile || match->CurrentType >= match->Profile->Types.size())
+            return options;
+
+        const auto groups = WeaponConfig::MatchOModSwitchGroups(weapon->Base, weapon->Instance);
+        if (std::ranges::any_of(groups, [](const auto& group) {
+                return group.Category == WeaponConfig::OModCategory::Ammunition;
+            }))
+        {
+            REX::WARN("Ammo switch wheel: weapon {:08X} has both an ammo profile and a category OMOD group; refusing ambiguous wheel",
+                weapon->Base->GetFormID());
+            return options;
+        }
+
+        for (std::size_t i = 0; i < match->Profile->Types.size(); ++i)
+        {
+            const auto& type = match->Profile->Types[i];
+            if (!type.Ammo)
+                continue;
+
+            std::uint32_t count = 0;
+            player->GetItemCount(count, const_cast<RE::TESAmmo*>(type.Ammo), false);
+            const bool current = i == match->CurrentType;
+            if (!current && count == 0)
+                continue;
+
+            const auto name = RE::TESFullName::GetFullName(*type.Ammo);
+            options.push_back({ const_cast<RE::TESAmmo*>(type.Ammo),
+                name.empty() ? std::format("Ammo {:08X}", type.Ammo->GetFormID()) : std::string{ name },
+                count, current });
+        }
+        return options;
+    }
+
+    bool SwitchEquippedAmmoTo(RE::TESAmmo* a_targetAmmo)
+    {
+        if (!a_targetAmmo)
+            return false;
+        const auto* tasks = F4SE::GetTaskInterface();
+        if (!tasks)
+            return false;
+
+        const auto generation = switchGeneration.load();
+        tasks->AddTask([a_targetAmmo, generation]() {
+            if (generation != switchGeneration.load())
+            {
+                REX::INFO("Ammo switch wheel: cancelled selection during save load");
+                return;
+            }
+
+            auto* player = RE::PlayerCharacter::GetSingleton();
+            const auto weapon = Core::GetEquippedWeapon(player);
+            if (!player || !weapon || !weapon->Base || !weapon->Instance)
+                return;
+
+            const auto* currentAmmo = weapon->Instance->ammo ? weapon->Instance->ammo : weapon->Base->weaponData.ammo;
+            const auto currentMatch = WeaponConfig::MatchAmmoSwitch(currentAmmo, weapon->Base->weaponData.ammo);
+            const auto targetMatch = WeaponConfig::MatchAmmoSwitch(a_targetAmmo, weapon->Base->weaponData.ammo);
+            if (!currentMatch || !targetMatch || currentMatch->Profile != targetMatch->Profile)
+            {
+                REX::INFO("Ammo switch wheel: selected ammo no longer matches the equipped weapon profile");
+                return;
+            }
+
+            REX::INFO("Ammo switch wheel: selected {:08X} for weapon {:08X}",
+                a_targetAmmo->GetFormID(), weapon->Base->GetFormID());
+            SwitchAmmoOnGameThread(player, *weapon, *currentMatch, targetMatch->CurrentType, true);
         });
         return true;
     }

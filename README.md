@@ -69,6 +69,12 @@ Fire-mode configurations that omit either OMOD reference are rejected with a war
 
 The upstream **Switch fire mode on every gun** option (`FireModeSwitch/bEveryGun`) enables an experimental, animation-free fallback for weapons without a dedicated JSON fire-mode rule. It requires `Modern Weapon Behavior.esp` to provide `ap_MWB_FireMode`, `mod_MWB_FireMode_Auto`, and `mod_MWB_FireMode_Semi`; it is disabled by default. A weapon with a JSON rule continues to use that rule, including its receiver OMOD requirements.
 
+## Ammo switch wheel
+
+The built-in ammunition OMOD hotkey keeps tap-to-cycle behavior. Holding it for about 350 ms opens a wheel built from the equipped weapon's matching `ammoSwitchProfiles` entry. The current ammo type is always included; other types appear when the player has at least one round in inventory. Aim with the mouse or right stick and release the hotkey to apply the highlighted type through the regular ammo OMOD and reload path.
+
+The wheel draws an equal-sized vector sector for every available type, so its layout follows the configuration instead of a fixed 12-slot artwork timeline. When a profile has more than 12 entries, sectors show index numbers and the highlighted ammo name remains in the center. The runtime wheel movie is generated from `as3/MWBAmmoSwitchWheel.as` with `scripts/publish-ammo-switch-wheel.ps1` and staged at `data/Interface/MWB_AmmoSwitchWheel.swf`.
+
 ## Generic OMOD switch groups
 
 Shared OMOD switch profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. Weapon entries reference one or more profile IDs using `omodSwitchProfiles`. Each group selects an attach-point keyword and a filter mode:

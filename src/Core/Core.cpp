@@ -25,6 +25,7 @@
 #include "Fire/AmmoFire.h"
 #include "Fire/FusionCharge.h"
 #include "HUD/AmmoCheckDisplay.h"
+#include "HUD/AmmoSwitchWheel.h"
 #include "HUD/WeaponHUD.h"
 #include "Hooks/AnimationEventHook.h"
 #include "Hooks/AttackButtonHook.h"
@@ -147,6 +148,7 @@ namespace Core
         WeaponActions::Initialize();
         FirstPerson::Initialize();
         AmmoCheckDisplay::Initialize();
+        AmmoSwitchWheel::Initialize();
         FireMode::Initialize();
         OModSwitch::Initialize();
         OModSwitch::InstallPipboyAmmoMarkerSync();
@@ -179,6 +181,7 @@ namespace Core
 
     void PreLoadGame()
     {
+        Hooks::ResetPendingOModHotkey();
         OModSwitch::ResetPendingSwitches();
         OModSwitch::ResetPendingAmmoReload();
         Reload::Abort("loading a save");

@@ -11,7 +11,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <variant>
+#include <vector>
 
 #include <RE/Fallout.h>
 #include <RE/B/BGSMod.h>
@@ -25,8 +27,18 @@ namespace RE::BSScript
 
 namespace OModSwitch
 {
+    struct AmmoSwitchOption
+    {
+        RE::TESAmmo* Ammo{ nullptr };
+        std::string Name;
+        std::uint32_t Count{ 0 };
+        bool Current{ false };
+    };
+
     bool CycleEquippedOMod(WeaponConfig::OModCategory a_category);
     bool CycleEquippedOMod(std::string_view a_keyID);
+    [[nodiscard]] std::vector<AmmoSwitchOption> GetEquippedAmmoSwitchOptions();
+    bool SwitchEquippedAmmoTo(RE::TESAmmo* a_targetAmmo);
     bool SwitchEquippedAmmoFromPipboy(RE::TESAmmo* a_targetAmmo);
     void InstallPipboyAmmoMarkerSync();
     void Initialize();
