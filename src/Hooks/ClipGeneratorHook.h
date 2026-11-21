@@ -33,6 +33,10 @@ namespace Hooks
 
     [[nodiscard]] float ClipLocalTime(const void* Clip);
 
+    void SetClipLocalTime(void* Clip, float Time);
+
+    [[nodiscard]] float ClipPlaybackSpeed(const void* Clip);
+
     [[nodiscard]] float ClipDuration(const void* Clip);
 
     [[nodiscard]] const void* FindActiveClip(std::span<const std::string_view> Names);

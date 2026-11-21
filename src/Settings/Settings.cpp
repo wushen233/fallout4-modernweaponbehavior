@@ -35,6 +35,8 @@ namespace
     REX::TIniSetting<bool> AimWobbleNoScopeSetting{ "AimWobble", "bNoScope", false };
     REX::TIniSetting<bool> HoldBlockSetting{ "HoldBlock", "bEnabled", false };
     REX::TIniSetting<bool> FireWhileSprintingSetting{ "FireWhileSprinting", "bEnabled", false };
+    REX::TIniSetting<bool> FusionChargeSetting{ "FusionCharge", "bEnabled", false };
+    REX::TIniSetting<bool> SemiAutoHoldSetting{ "SemiAutoHold", "bEnabled", false };
     REX::TIniSetting<bool> SightedFireJiggleSetting{ "SightedFireJiggle", "bEnabled", true };
     REX::TIniSetting<bool> FullEquipOnSwitchSetting{ "FullEquipOnSwitch", "bEnabled", false };
     REX::TIniSetting<bool> TacticalSprintSetting{ "TacticalSprint", "bEnabled", false };
@@ -81,6 +83,8 @@ namespace
         McmBool{ "AimWobble", "bNoScope", &AimWobbleNoScopeSetting },
         McmBool{ "HoldBlock", "bEnabled", &HoldBlockSetting },
         McmBool{ "FireWhileSprinting", "bEnabled", &FireWhileSprintingSetting },
+        McmBool{ "FusionCharge", "bEnabled", &FusionChargeSetting },
+        McmBool{ "SemiAutoHold", "bEnabled", &SemiAutoHoldSetting },
         McmBool{ "SightedFireJiggle", "bEnabled", &SightedFireJiggleSetting },
         McmBool{ "FullEquipOnSwitch", "bEnabled", &FullEquipOnSwitchSetting },
         McmBool{ "TacticalSprint", "bEnabled", &TacticalSprintSetting },
@@ -132,12 +136,13 @@ namespace
     void LogValues(std::string_view When)
     {
         REX::INFO("Settings ({}): verboseLog={}, bulletInChamber={} (tactical reload only {}), dropUnspentAmmo={}, manualReload={}, slideLock={}, fireModeSwitch={} (every gun {}), weaponHUD={}, ammoCheckEveryGun={}, "
-                  "thirdPersonSprintFOV={}, aimWobble(vanillaScopes={}, 3DScopes={}, noScope={}), holdBlock={}, fireWhileSprinting={}, sightedFireJiggle={}, "
+                  "thirdPersonSprintFOV={}, aimWobble(vanillaScopes={}, 3DScopes={}, noScope={}), holdBlock={}, fireWhileSprinting={}, fusionCharge={}, semiAutoHold={}, sightedFireJiggle={}, "
                   "fullEquipOnSwitch={}, tacticalSprint={} (speed x{:.2f}, action points x{:.2f}, animation x{:.2f}), slide={} (duration {:.2f}s, "
                   "committed {:.2f}s, speed x{:.2f})",
             When, VerboseLogSetting.GetValue(), BulletInChamberSetting.GetValue(), BulletInChamberTacticalOnlySetting.GetValue(), DropUnspentAmmoSetting.GetValue(), ManualReloadSetting.GetValue(),
             SlideLockSetting.GetValue(), FireModeSwitchSetting.GetValue(), FireModeEveryGunSetting.GetValue(), WeaponHUDSetting.GetValue(), AmmoCheckEveryGunSetting.GetValue(), ThirdPersonSprintFOVSetting.GetValue(),
             AimWobbleVanillaScopesSetting.GetValue(), AimWobble3DScopesSetting.GetValue(), AimWobbleNoScopeSetting.GetValue(), HoldBlockSetting.GetValue(), FireWhileSprintingSetting.GetValue(),
+            FusionChargeSetting.GetValue(), SemiAutoHoldSetting.GetValue(),
             SightedFireJiggleSetting.GetValue(), FullEquipOnSwitchSetting.GetValue(), TacticalSprintSetting.GetValue(),
             Settings::TacticalSprintSpeed(), Settings::TacticalSprintActionPoints(), Settings::TacticalSprintAnimation(), SlideSetting.GetValue(),
             Settings::SlideDuration(), Settings::SlideCommittedTime(), Settings::SlideSpeed());
@@ -245,6 +250,16 @@ namespace Settings
     bool FireWhileSprinting()
     {
         return FireWhileSprintingSetting.GetValue();
+    }
+
+    bool FusionCharge()
+    {
+        return FusionChargeSetting.GetValue();
+    }
+
+    bool SemiAutoHold()
+    {
+        return SemiAutoHoldSetting.GetValue();
     }
 
     bool SightedFireJiggle()

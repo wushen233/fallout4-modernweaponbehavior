@@ -54,6 +54,10 @@ namespace Settings
 
     [[nodiscard]] bool FireWhileSprinting();
 
+    [[nodiscard]] bool FusionCharge();
+
+    [[nodiscard]] bool SemiAutoHold();
+
     [[nodiscard]] bool SightedFireJiggle();
 
     [[nodiscard]] bool FullEquipOnSwitch();

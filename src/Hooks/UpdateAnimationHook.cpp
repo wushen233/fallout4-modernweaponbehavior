@@ -13,6 +13,7 @@
 */
 
 #include "UpdateAnimationHook.h"
+#include "Animation/DynamicLoop.h"
 #include "Magic/MagicAnnotations.h"
 #include "Arm/ArmSpace.h"
 #include "HUD/AmmoCheckDisplay.h"
@@ -48,6 +49,7 @@ namespace
     {
         static void Thunk(RE::PlayerCharacter* This, float Delta)
         {
+            DynamicLoop::Tick();
             ArmSpace::Diagnose(This);
             MagicAnnotations::OnUpdateAnimation(This);
             Original(This, Delta);

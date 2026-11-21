@@ -12,8 +12,11 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 * Inspect, ammo check (with an on-screen magazine readout, optionally on every gun), special attack and fire mode switch (optionally an instant switch on every gun, experimental), callable from Papyrus and MCM hotkeys.
 * Arm-only animations, one per arm at a time (a new one restarts the arm unless either is locked), with weapon lock (guns and melee weapons), slide lock (with lock and release sounds, nodes hidden while locked, and an option to wait for the last shot clip) and per fire mode weapon bone poses.
 * Animation annotations to fire ammo, use items and cast spells from any animation.
+* Dynamic loops: `MWB_dyn_StartLoop` and `MWB_dyn_EndLoop` hold the part of any animation between them in a loop until Papyrus ends it, either jumping straight to the end of the loop or letting the current pass play out.
 * Weapon HUD module (with the names given at the workbench), bullet in the chamber, drop unspent ammo on reload and manual reload, where only the reload button reloads and the trigger on an empty magazine dry fires (the last three with per weapon exclusions).
 * Hold to block for melee and fists, and firing while sprinting in first person.
+* Charged shots fired on full charge, like a fusion rifle: weapons that charge fire by themselves once fully charged, and letting go earlier cancels the charge.
+* Hold to fire semi-automatic: holding the trigger keeps a semi-automatic gun firing, after a short delay so an ordinary click still fires once.
 * Tactical sprint (first and third person) and slide (first person), as in Call of Duty, with optional clips per weapon and a slide sound per floor material; jumping while sprinting plays the sprint stop and start clips.
 * Last shot clips: a fire animation of its own for the last round in the magazine, from the hip and from the sights.
 * Bolt charge while aiming that stays in the sights, always follows the shot and carries on through a sprint.
@@ -21,7 +24,7 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 * Aim sway and hold breath, the game's own, for regular scopes, 3D scopes and sights without a scope, each with its own setting.
 * Aim down sight in and out animations timed to the weapon's sight speed, and a setting for the sighted fire jiggle.
 * Animation clips missing from the AnimTextData still load.
-* MWB's animation events and variables are added in memory to every character behavior the game loads, so the mod ships only the behaviors it changes and works under other mods' root behaviors.
+* MWB's animation events and variables are added in memory to every character behavior the game loads, so the mod ships only the behaviors it changes and works under other mods' root behaviors, including ones with stray variable values (such as Tactical Reload's Power Armor root).
 * A setting to play the full equip animation instead of the quick one when switching weapons from favorites, guns and melee weapons.
 * An exclusion panel inside the MCM: players take any feature away from the weapon in hand, or from every weapon with one of its keywords, and it applies at once.
 
@@ -85,13 +88,14 @@ Set one of these environment variables and run `xmake install`:
 src/
   main.cpp     F4SE entry points (OG query and load)
   Actions/     first person only actions and weapon actions allowed per weapon
+  Animation/   MWB_dyn_StartLoop and MWB_dyn_EndLoop dynamic loops
   Arm/         arm-only animations: weapon lock and arm space
   Config/      the per weapon JSON files and the exclusions
   Core/        runtime check, F4SE messages, the equipped weapon and the gun state
-  Fire/        MWB_WeaponFireAmmo annotation
+  Fire/        MWB_WeaponFireAmmo annotation, charged shots fired on full charge, hold to fire semi-automatic
   HUD/         weapon HUD module and ammo check readout
   Behavior/    MWB's event and variable names added to every behavior loaded
-  Hooks/       animation events, graph manager events, graph notify, clip generators, graph generate, idle start, input, queued events, subgraph animations, animation update
+  Hooks/       animation events, attack button, graph manager events, graph notify, clip generators, graph generate, idle start, input, queued events, subgraph animations, animation update
   Magic/       MWB_UseAlchemyItem and MWB_CastSpell annotations
   Melee/       hold to block
   Papyrus/     native functions of the MWB script

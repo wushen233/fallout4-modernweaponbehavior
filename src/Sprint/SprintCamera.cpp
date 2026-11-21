@@ -15,6 +15,24 @@
 #include "SprintCamera.h"
 #include "Settings/Settings.h"
 
+namespace
+{
+    constexpr std::uint16_t SprintingBit = 0x100;
+
+    [[nodiscard]] bool Sprinting(const RE::PlayerCharacter* Player)
+    {
+        return (static_cast<std::uint16_t>(Player->moveMode) & SprintingBit) != 0;
+    }
+
+    void LeaveSprintCamera(RE::PlayerCharacter* Player)
+    {
+        static const RE::BSFixedString StopEvent{ "CameraSprintStop" };
+
+        if (Player->NotifyAnimationGraphImpl(StopEvent) && Settings::VerboseLog())
+            REX::INFO("Sprint camera: the third person graph was in the sprint camera with it turned off, CameraSprintStop sent");
+    }
+}
+
 namespace SprintCamera
 {
     void Tick(RE::PlayerCharacter* Player)
@@ -23,16 +41,23 @@ namespace SprintCamera
             return;
 
         static const RE::BSFixedString Variable{ "iMWB_SprintCamera" };
-        const std::int32_t Wanted = Settings::ThirdPersonSprintFOV() ? 1 : 0;
+        const bool         Enabled = Settings::ThirdPersonSprintFOV();
+        const std::int32_t Wanted = Enabled ? 1 : 0;
 
         std::int32_t Current = 0;
 
-        if (!Player->GetGraphVariableImplInt(Variable, Current) || Current == Wanted)
+        if (!Player->GetGraphVariableImplInt(Variable, Current))
             return;
 
-        Player->SetGraphVariableInt(Variable, Wanted);
+        if (Current != Wanted)
+        {
+            Player->SetGraphVariableInt(Variable, Wanted);
 
-        if (Settings::VerboseLog())
-            REX::INFO("Sprint camera: iMWB_SprintCamera {} -> {}", Current, Wanted);
+            if (Settings::VerboseLog())
+                REX::INFO("Sprint camera: iMWB_SprintCamera {} -> {}", Current, Wanted);
+        }
+
+        if (!Enabled && Sprinting(Player))
+            LeaveSprintCamera(Player);
     }
 }
