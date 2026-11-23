@@ -125,12 +125,14 @@ namespace
     {
         OModReferenceOptions Ammo;
         std::optional<OModReferenceOptions> OMod;
+        std::optional<std::string> Icon;
     };
 
     struct AmmoSwitchProfileOptions
     {
         std::string Id;
         std::optional<std::string> KeyID;
+        std::optional<std::string> Icon;
         OModReferenceOptions BaseAmmo;
         std::optional<OModReferenceOptions> WeaponBaseAmmo;
         std::optional<OModReferenceOptions> BaseOMod;
@@ -209,14 +211,14 @@ template <>
 struct glz::meta<AmmoSwitchTypeOptions>
 {
     using T = AmmoSwitchTypeOptions;
-    static constexpr auto value = object("ammo", &T::Ammo, "omod", &T::OMod);
+    static constexpr auto value = object("ammo", &T::Ammo, "omod", &T::OMod, "icon", &T::Icon);
 };
 
 template <>
 struct glz::meta<AmmoSwitchProfileOptions>
 {
     using T = AmmoSwitchProfileOptions;
-    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "baseAmmo", &T::BaseAmmo,
+    static constexpr auto value = object("id", &T::Id, "keyID", &T::KeyID, "icon", &T::Icon, "baseAmmo", &T::BaseAmmo,
         "weaponBaseAmmo", &T::WeaponBaseAmmo, "baseOMod", &T::BaseOMod, "ammoTypes", &T::AmmoTypes);
 };
 
@@ -1512,10 +1514,11 @@ namespace
         WeaponConfig::AmmoSwitchProfile Profile{
             .Id = Options.Id,
             .KeyID = Options.KeyID.value_or(std::string{}),
+            .Icon = Options.Icon.value_or(std::string{}),
             .WeaponBaseAmmo = WeaponBaseAmmo
         };
         const auto AddType = [&](const OModReferenceOptions& AmmoReference, const std::optional<OModReferenceOptions>& OModReference,
-                                 std::string_view TypeWhere) -> bool
+                                 const std::string& Icon, std::string_view TypeWhere) -> bool
         {
             const auto Ammo = ParseAmmoReference(AmmoReference, std::format("{} ammo", TypeWhere));
             if (!Ammo)
@@ -1555,16 +1558,16 @@ namespace
                 return false;
             }
 
-            Profile.Types.push_back({ .Ammo = Ammo, .OMod = OMod });
+            Profile.Types.push_back({ .Ammo = Ammo, .OMod = OMod, .Icon = Icon });
             return true;
         };
 
-        if (!AddType(Options.BaseAmmo, Options.BaseOMod, std::format("{} base", Where)))
+        if (!AddType(Options.BaseAmmo, Options.BaseOMod, Profile.Icon, std::format("{} base", Where)))
             return;
         for (std::size_t i = 0; i < Options.AmmoTypes.size(); ++i)
         {
             const auto& Type = Options.AmmoTypes[i];
-            if (!AddType(Type.Ammo, Type.OMod, std::format("{} ammoTypes[{}]", Where, i)))
+            if (!AddType(Type.Ammo, Type.OMod, Type.Icon.value_or(std::string{}), std::format("{} ammoTypes[{}]", Where, i)))
                 return;
         }
         if (Profile.Types.size() < 2 || !Profile.AttachPoint)

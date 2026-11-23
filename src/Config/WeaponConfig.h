@@ -46,12 +46,14 @@ namespace WeaponConfig
     {
         const RE::TESAmmo* Ammo{ nullptr };
         const RE::BGSMod::Attachment::Mod* OMod{ nullptr };
+        std::string Icon;
     };
 
     struct AmmoSwitchProfile
     {
         std::string Id;
         std::string KeyID;
+        std::string Icon;
         const RE::TESAmmo* WeaponBaseAmmo{ nullptr };
         RE::BGSKeyword* AttachPoint{ nullptr };
         std::vector<AmmoSwitchType> Types;

@@ -23,7 +23,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x001CDC31"
-          }
+          },
+          "icon": "shotgun"
         },
         {
           "ammo": {
@@ -33,7 +34,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00163269"
-          }
+          },
+          "icon": "incendiary"
         },
         {
           "ammo": {
@@ -43,7 +45,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00163268"
-          }
+          },
+          "icon": "energy"
         },
         {
           "ammo": {
@@ -53,9 +56,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x001CDC33"
-          }
+          },
+          "icon": "explosive"
         }
-      ]
+      ],
+      "icon": "shotgun"
     }
   ]
 }

@@ -23,7 +23,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00026F0E"
-          }
+          },
+          "icon": "ap"
         },
         {
           "ammo": {
@@ -33,7 +34,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00026F10"
-          }
+          },
+          "icon": "ballistic"
         },
         {
           "ammo": {
@@ -43,7 +45,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00026F0D"
-          }
+          },
+          "icon": "hollowPoint"
         },
         {
           "ammo": {
@@ -53,7 +56,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x001DED89"
-          }
+          },
+          "icon": "plasma"
         },
         {
           "ammo": {
@@ -63,7 +67,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0012B757"
-          }
+          },
+          "icon": "explosive"
         },
         {
           "ammo": {
@@ -73,9 +78,22 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0012B906"
-          }
+          },
+          "icon": "ballistic"
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001DED84"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x001DED8A"
+          },
+          "icon": "ballistic"
         }
-      ]
+      ],
+      "icon": "ballistic"
     },
     {
       "id": "ExpandingBullets.MR_556mm_223.2",
@@ -100,9 +118,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0002B36D"
-          }
+          },
+          "icon": "hollowPoint"
         }
-      ]
+      ],
+      "icon": "ballistic"
     }
   ]
 }

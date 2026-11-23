@@ -23,7 +23,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0003C4CA"
-          }
+          },
+          "icon": "hollowPoint"
         },
         {
           "ammo": {
@@ -33,7 +34,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0026BCC9"
-          }
+          },
+          "icon": "ballistic"
         },
         {
           "ammo": {
@@ -43,9 +45,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x001D64D9"
-          }
+          },
+          "icon": "ballistic"
         }
-      ]
+      ],
+      "icon": "ballistic"
     }
   ]
 }

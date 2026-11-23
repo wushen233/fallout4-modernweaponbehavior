@@ -23,7 +23,8 @@
           "omod": {
             "plugin": "Fallout4.esm",
             "formId": "0x001AC24C"
-          }
+          },
+          "icon": "explosive"
         },
         {
           "ammo": {
@@ -33,9 +34,11 @@
           "omod": {
             "plugin": "DLCNukaWorld.esm",
             "formId": "0x0204E494"
-          }
+          },
+          "icon": "explosive"
         }
-      ]
+      ],
+      "icon": "explosive"
     }
   ]
 }

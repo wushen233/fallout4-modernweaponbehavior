@@ -18,20 +18,24 @@
 
 #include <F4SE/API.h>
 #include <RE/A/ActorEquipManager.h>
+#include <RE/C/CombatFormulas.h>
 
 #include <RE/B/BGSInventoryItem.h>
 #include <RE/B/BGSInventoryList.h>
 #include <RE/B/BGSMod.h>
+#include <RE/B/BGSDamageType.h>
 #include <RE/B/BGSObjectInstance.h>
 #include <RE/B/BGSObjectInstanceExtra.h>
 #include <RE/B/BipedAnim.h>
 #include <RE/B/BSSpinLock.h>
 #include <RE/E/EquippedItem.h>
 #include <RE/E/EquippedWeaponData.h>
+#include <RE/E/ExtraHealth.h>
 #include <RE/E/ExtraInstanceData.h>
 #include <RE/M/MiddleHighProcessData.h>
 #include <RE/P/PipboyDataManager.h>
 #include <RE/P/PipboyArray.h>
+#include <RE/P/PipboyInventoryUtils.h>
 #include <RE/P/PipboyPrimitiveValue.h>
 #include <RE/P/PlayerCharacter.h>
 #include <RE/P/PlayerControls.h>
@@ -41,6 +45,12 @@
 #include <RE/T/TESObjectWEAP.h>
 
 #include <limits>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <format>
+#include <string>
+#include <vector>
 
 namespace OModSwitch
 {
@@ -90,6 +100,261 @@ namespace OModSwitch
         std::mutex pendingReloadLock;
         std::optional<PendingAmmoReload> pendingReload;
         std::uint64_t reloadGeneration = 0;
+
+        struct DamageTypeValue
+        {
+            std::uint32_t Position{ 0 };
+            float Value{ 0.0f };
+        };
+
+        // PipboyInventoryUtils::FillDamageTypeInfo returns the same one-based
+        // positions used by Fallout 4's item-card damage icons.
+        enum class PipboyDamageTypePosition : std::uint32_t
+        {
+            Physical = 1,
+            Poison = 2,
+            Fire = 3,
+            Energy = 4,
+            Frost = 5,
+            Radiation = 6
+        };
+
+        constexpr std::uint32_t WeaponEnchantmentsProperty =
+            static_cast<std::uint32_t>(RE::BGSMod::Property::WEAPON::kEnchantments);
+        constexpr std::uint32_t WeaponDamageTypesProperty =
+            static_cast<std::uint32_t>(RE::BGSMod::Property::WEAPON::kDamageTypes);
+
+        std::uint32_t DamageTypePosition(const RE::TESForm* a_type)
+        {
+            if (!a_type)
+                return 0;
+
+            const auto* editorIDText = a_type->GetFormEditorID();
+            if (!editorIDText)
+                return 0;
+            auto editorID = std::string{ editorIDText };
+            if (const auto* damageType = a_type->As<RE::BGSDamageType>();
+                damageType && damageType->data.resistance)
+            {
+                const auto* resistanceEditorID = damageType->data.resistance->GetFormEditorID();
+                if (resistanceEditorID)
+                {
+                    editorID.push_back('_');
+                    editorID += resistanceEditorID;
+                }
+            }
+            std::ranges::transform(editorID, editorID.begin(), [](unsigned char a_character) {
+                return static_cast<char>(std::tolower(a_character));
+            });
+
+            if (editorID.find("radiation") != std::string::npos || editorID.find("rad_") != std::string::npos ||
+                editorID.find("radresist") != std::string::npos || editorID.find("radiationresist") != std::string::npos ||
+                editorID.find("rads") != std::string::npos || editorID == "dtrad")
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Radiation);
+            if (editorID.find("poison") != std::string::npos || editorID.find("toxin") != std::string::npos)
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Poison);
+            if (editorID.find("fire") != std::string::npos || editorID.find("incendiary") != std::string::npos)
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Fire);
+            if (editorID.find("energy") != std::string::npos || editorID.find("electric") != std::string::npos)
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Energy);
+            if (editorID.find("frost") != std::string::npos || editorID.find("cryo") != std::string::npos)
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Frost);
+            if (editorID.find("physical") != std::string::npos)
+                return static_cast<std::uint32_t>(PipboyDamageTypePosition::Physical);
+            return 0;
+        }
+
+        std::vector<DamageTypeValue> ReadDamageTypeRecords(
+            const RE::BSTArray<RE::BSTTuple<RE::TESForm*, RE::BGSTypedFormValuePair::SharedVal>>* a_types)
+        {
+            std::vector<DamageTypeValue> result;
+            if (!a_types)
+                return result;
+
+            for (std::uint32_t i = 0; i < a_types->size(); ++i)
+            {
+                const auto& entry = (*a_types)[i];
+                const auto position = DamageTypePosition(entry.first);
+                if (position != 0 && std::isfinite(entry.second.f))
+                    result.push_back({ position, entry.second.f });
+            }
+            return result;
+        }
+
+        std::vector<DamageTypeValue> ReadPipboyDamageTypes(const RE::BGSInventoryItem* a_item,
+            const RE::BGSInventoryItem::Stack* a_stack)
+        {
+            std::vector<DamageTypeValue> result;
+            if (!a_item)
+                return result;
+
+            RE::BSScrapArray<RE::BSTTuple<std::uint32_t, float>> nativeValues;
+            RE::PipboyInventoryUtils::FillDamageTypeInfo(*a_item, a_stack, nativeValues);
+            result.reserve(nativeValues.size());
+            for (std::uint32_t i = 0; i < nativeValues.size(); ++i)
+            {
+                const auto& entry = nativeValues[i];
+                if (entry.first > 0 && std::isfinite(entry.second))
+                    result.push_back({ entry.first, entry.second });
+            }
+            return result;
+        }
+
+        void ApplyEnchantmentDamage(std::vector<DamageTypeValue>& a_values, const RE::TESForm* a_form)
+        {
+            const auto* enchantment = a_form ? a_form->As<RE::EnchantmentItem>() : nullptr;
+            if (!enchantment)
+                return;
+
+            const auto* enchantmentEditorID = enchantment->GetFormEditorID();
+
+            // Munitions Reloaded also attaches a self-radiation enchantment to
+            // some rounds. That is a drawback to the shooter, not projectile
+            // damage, so it must not be presented as target damage.
+            if (enchantmentEditorID && std::string_view{ enchantmentEditorID }.find("SelfDamage") != std::string_view::npos)
+                return;
+
+            // Enchantments can contain conditional alternatives for the same
+            // damage type (for example, radiation-healing targets). Use the
+            // largest magnitude for each type instead of double-counting those
+            // mutually exclusive effects.
+            std::vector<DamageTypeValue> enchantmentValues;
+            for (const auto* effect : enchantment->listOfEffects)
+            {
+                if (!effect || !effect->effectSetting ||
+                    (!effect->effectSetting->data.resistVariable && !effect->effectSetting->data.primaryAV))
+                    continue;
+
+                // The MGEF's Resist Value identifies the incoming damage
+                // channel (for example RadResistExposure); primaryAV is a
+                // separate actor-value effect and can be unrelated.
+                const auto* damageChannel = effect->effectSetting->data.resistVariable;
+                if (!damageChannel)
+                    damageChannel = effect->effectSetting->data.primaryAV;
+                const auto position = DamageTypePosition(damageChannel);
+                const float magnitude = effect->data.magnitude;
+                if (position == 0 || position <= static_cast<std::uint32_t>(PipboyDamageTypePosition::Physical) ||
+                    !std::isfinite(magnitude) || magnitude <= 0.0f)
+                    continue;
+
+                const auto found = std::ranges::find(enchantmentValues, position, &DamageTypeValue::Position);
+                if (found == enchantmentValues.end())
+                    enchantmentValues.push_back({ position, magnitude });
+                else
+                    found->Value = std::max(found->Value, magnitude);
+            }
+
+            for (const auto& value : enchantmentValues)
+            {
+                const auto found = std::ranges::find(a_values, value.Position, &DamageTypeValue::Position);
+                if (found == a_values.end())
+                    a_values.push_back(value);
+                else
+                    found->Value += value.Value;
+            }
+        }
+
+        void ApplyDamageTypeProperties(std::vector<DamageTypeValue>& a_values,
+            const RE::BGSMod::Attachment::Mod* a_omod)
+        {
+            if (!a_omod)
+                return;
+
+            RE::BGSMod::Attachment::Mod::Data data{};
+            a_omod->GetData(data);
+            if (!data.propertyMods)
+                return;
+
+            const auto apply = [&](const RE::BGSMod::Property::Mod& property) {
+                if (property.target == WeaponEnchantmentsProperty)
+                {
+                    // OMOD Enchantments is a Form property; it is not a
+                    // FormValuePair like Damage Types. Handle it before the
+                    // pair-only branch so enchantment damage (e.g. radiation)
+                    // is included in the preview.
+                    ApplyEnchantmentDamage(a_values, property.data.form);
+                    return;
+                }
+                if (property.type != RE::BGSMod::Property::TYPE::kPair)
+                    return;
+                if (property.target != WeaponDamageTypesProperty)
+                    return;
+
+                auto* damageType = RE::TESForm::GetFormByID(property.data.fv.formID);
+                const auto position = DamageTypePosition(damageType);
+                const float amount = property.data.fv.value;
+                if (position == 0 || !std::isfinite(amount))
+                    return;
+
+                const auto found = std::ranges::find(a_values, position, &DamageTypeValue::Position);
+                switch (property.op)
+                {
+                case RE::BGSMod::Property::OP::kSet:
+                    if (found == a_values.end())
+                        a_values.push_back({ position, amount });
+                    else
+                        found->Value = amount;
+                    break;
+                case RE::BGSMod::Property::OP::kAdd:
+                    if (found == a_values.end())
+                        a_values.push_back({ position, amount });
+                    else
+                        found->Value += amount;
+                    break;
+                case RE::BGSMod::Property::OP::kMul:
+                    if (found == a_values.end())
+                        a_values.push_back({ position, 0.0f });
+                    else
+                        found->Value *= amount;
+                    break;
+                default:
+                    break;
+                }
+            };
+
+            for (std::uint32_t i = 0; i < data.propertyModCount; ++i)
+                apply(data.propertyMods[i]);
+            std::erase_if(a_values, [](const auto& value) { return !std::isfinite(value.Value) || std::abs(value.Value) < 0.01f; });
+        }
+
+        std::string FormatAmmoDamageInfo(const RE::TESObjectWEAP* a_weapon,
+            const RE::BGSInventoryItem* a_inventoryItem,
+            const WeaponConfig::AmmoSwitchType& a_targetType, float a_displayDamage)
+        {
+            // Ask the same engine helper used by the Pip-Boy item card for the
+            // weapon's unstacked/base damage types. Passing the equipped stack
+            // here leaks the currently equipped ammo's typed damage into every
+            // candidate and cannot be reliably reversed for OMOD Set ops.
+            auto values = ReadPipboyDamageTypes(a_inventoryItem, nullptr);
+            if (values.empty() && a_weapon)
+                values = ReadDamageTypeRecords(a_weapon->weaponData.damageTypes);
+
+            // Rebuild each preview from the same clean baseline, then apply
+            // only that candidate's ammo OMOD. This makes switching preview
+            // sectors replace (rather than accumulate) radiation/poison/etc.
+            ApplyDamageTypeProperties(values, a_targetType.OMod);
+
+            std::string result = std::format("{:.0f}", a_displayDamage);
+            for (const auto& entry : values)
+            {
+                if (entry.Position <= static_cast<std::uint32_t>(PipboyDamageTypePosition::Physical) || entry.Value <= 0.0f)
+                    continue;
+                std::string_view key;
+                switch (static_cast<PipboyDamageTypePosition>(entry.Position))
+                {
+                case PipboyDamageTypePosition::Poison: key = "$MWB_AmmoDamage_Poison"; break;
+                case PipboyDamageTypePosition::Fire: key = "$MWB_AmmoDamage_Fire"; break;
+                case PipboyDamageTypePosition::Energy: key = "$MWB_AmmoDamage_Energy"; break;
+                case PipboyDamageTypePosition::Frost: key = "$MWB_AmmoDamage_Frost"; break;
+                case PipboyDamageTypePosition::Radiation: key = "$MWB_AmmoDamage_Radiation"; break;
+                default: continue;
+                }
+                if (key.empty())
+                    continue;
+                result += std::format("\n{}: {:.0f}", key, entry.Value);
+            }
+            return result;
+        }
 
         void UpdateEquipGraph(RE::Actor* a_actor, bool a_updateWeaponState)
         {
@@ -1754,6 +2019,26 @@ namespace OModSwitch
         if (!match || !match->Profile || match->CurrentType >= match->Profile->Types.size())
             return options;
 
+        const RE::BGSObjectInstanceT<RE::TESObjectWEAP> weaponInstance{ weapon->Base, weapon->Instance };
+        float condition = 1.0f;
+        auto* inventoryItem = FindInventoryItem(player, weapon->Base);
+        RE::BGSInventoryItem::Stack* equippedStack = nullptr;
+        if (inventoryItem)
+        {
+            for (auto* stack = inventoryItem->stackData.get(); stack; stack = stack->nextStack.get())
+            {
+                if (!stack->IsEquipped())
+                    continue;
+                equippedStack = stack;
+                if (stack->extra)
+                {
+                    if (const auto* health = stack->extra->GetByType<RE::ExtraHealth>(); health && std::isfinite(health->health))
+                        condition = health->health;
+                }
+                break;
+            }
+        }
+
         const auto groups = WeaponConfig::MatchOModSwitchGroups(weapon->Base, weapon->Instance);
         if (std::ranges::any_of(groups, [](const auto& group) {
                 return group.Category == WeaponConfig::OModCategory::Ammunition;
@@ -1777,9 +2062,15 @@ namespace OModSwitch
                 continue;
 
             const auto name = RE::TESFullName::GetFullName(*type.Ammo);
+            // Use the engine display-damage formula with this weapon instance,
+            // selected ammo, and equipped stack condition.
+            const auto damage = RE::CombatFormulas::GetWeaponDisplayDamage(weaponInstance, type.Ammo, condition);
+            const auto damageInfo = FormatAmmoDamageInfo(weapon->Base,
+                inventoryItem, type,
+                std::isfinite(damage) ? damage : 0.0f);
             options.push_back({ const_cast<RE::TESAmmo*>(type.Ammo),
                 name.empty() ? std::format("Ammo {:08X}", type.Ammo->GetFormID()) : std::string{ name },
-                count, current });
+                type.Icon, count, damageInfo, current });
         }
         return options;
     }

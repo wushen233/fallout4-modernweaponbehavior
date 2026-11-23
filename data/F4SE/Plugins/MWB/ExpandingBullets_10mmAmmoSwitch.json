@@ -19,7 +19,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00040925"
-          }
+          },
+          "icon": "hollowPoint"
         },
         {
           "ammo": {
@@ -29,7 +30,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00044D79"
-          }
+          },
+          "icon": "ap"
         },
         {
           "ammo": {
@@ -39,7 +41,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x00162F96"
-          }
+          },
+          "icon": "cryo"
         },
         {
           "ammo": {
@@ -49,7 +52,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0011A799"
-          }
+          },
+          "icon": "ballistic"
         },
         {
           "ammo": {
@@ -59,7 +63,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0011A79A"
-          }
+          },
+          "icon": "subsonic"
         },
         {
           "ammo": {
@@ -69,7 +74,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0011A79B"
-          }
+          },
+          "icon": "energy"
         },
         {
           "ammo": {
@@ -79,13 +85,26 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0012B915"
-          }
+          },
+          "icon": "ballistic"
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F97"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F98"
+          },
+          "icon": "subsonic"
         }
       ],
       "weaponBaseAmmo": {
         "plugin": "Fallout4.esm",
         "formId": "0x0001F276"
-      }
+      },
+      "icon": "ballistic"
     }
   ]
 }

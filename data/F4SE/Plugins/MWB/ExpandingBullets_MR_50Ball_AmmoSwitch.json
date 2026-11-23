@@ -19,7 +19,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0009E86D"
-          }
+          },
+          "icon": "ballistic"
         },
         {
           "ammo": {
@@ -29,7 +30,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x000F4039"
-          }
+          },
+          "icon": "shotgun"
         },
         {
           "ammo": {
@@ -39,9 +41,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x000F403A"
-          }
+          },
+          "icon": "ballistic"
         }
-      ]
+      ],
+      "icon": "ballistic"
     }
   ]
 }

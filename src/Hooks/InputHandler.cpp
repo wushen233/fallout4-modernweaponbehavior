@@ -24,6 +24,8 @@
 #include <glaze/json.hpp>
 
 #include <RE/U/UI.h>
+#include <RE/B/BSInputEventUser.h>
+#include <RE/M/MenuControls.h>
 #include <RE/T/ThumbstickEvent.h>
 
 #include <Windows.h>
@@ -31,6 +33,7 @@
 
 #include <fstream>
 #include <chrono>
+#include <mutex>
 
 struct McmKeybind
 {
@@ -78,9 +81,12 @@ namespace
         std::chrono::steady_clock::time_point PressedAt;
         bool WheelAttempted{ false };
         bool WheelOpened{ false };
+        bool IgnoreRelease{ false };
     };
 
+    std::mutex PendingAmmoSwitchLock;
     std::optional<PendingAmmoHotkey> PendingAmmoSwitch;
+    std::uint32_t CompletedAmmoSwitchKeycode{ 0 };
     constexpr auto AmmoWheelHoldThreshold = std::chrono::milliseconds(350);
 
     [[nodiscard]] std::uint32_t ReadModifiers()
@@ -146,28 +152,72 @@ namespace
             if (hotkey == OModHotkeys.end())
                 return false;
 
-            PendingAmmoSwitch = PendingAmmoHotkey{ *keycode, std::chrono::steady_clock::now() };
+            const bool wheelAlreadyOpen = AmmoSwitchWheel::IsOpen();
+            bool cancelStaleWheel = false;
+            {
+                const std::scoped_lock lock{ PendingAmmoSwitchLock };
+                if (PendingAmmoSwitch)
+                {
+                    if (PendingAmmoSwitch->Keycode != *keycode)
+                        return false;
+
+                    // If the release edge was lost while the wheel was open,
+                    // use the next press to close it safely instead of
+                    // reusing stale pending state and confirming twice.
+                    if (wheelAlreadyOpen)
+                    {
+                        PendingAmmoSwitch->WheelAttempted = true;
+                        PendingAmmoSwitch->WheelOpened = false;
+                        PendingAmmoSwitch->IgnoreRelease = true;
+                        cancelStaleWheel = true;
+                    }
+                    else
+                        return true;
+                }
+                else
+                {
+                    PendingAmmoSwitch = PendingAmmoHotkey{ *keycode, std::chrono::steady_clock::now() };
+                    CompletedAmmoSwitchKeycode = 0;
+                    if (wheelAlreadyOpen)
+                    {
+                        PendingAmmoSwitch->WheelAttempted = true;
+                        PendingAmmoSwitch->IgnoreRelease = true;
+                        cancelStaleWheel = true;
+                    }
+                }
+            }
+            if (cancelStaleWheel)
+                AmmoSwitchWheel::Cancel();
             return true;
         }
 
-        if (!PendingAmmoSwitch || PendingAmmoSwitch->Keycode != *keycode)
-            return false;
+        std::optional<PendingAmmoHotkey> completed;
+        {
+            const std::scoped_lock lock{ PendingAmmoSwitchLock };
+            if (!PendingAmmoSwitch)
+                return Event.value == 0.0f && CompletedAmmoSwitchKeycode == *keycode;
+            if (PendingAmmoSwitch->Keycode != *keycode)
+                return false;
+            if (Event.value != 0.0f)
+                return true;
 
-        if (Event.value != 0.0f)
-            return Event.QPressed();
+            completed = *PendingAmmoSwitch;
+            PendingAmmoSwitch.reset();
+            CompletedAmmoSwitchKeycode = *keycode;
+        }
 
-        const bool wheelWasOpened = PendingAmmoSwitch->WheelOpened || AmmoSwitchWheel::IsOpen();
-        PendingAmmoSwitch.reset();
+        if (completed->IgnoreRelease)
+            return true;
+
+        const bool wheelWasOpened = completed->WheelOpened || AmmoSwitchWheel::IsOpen();
         if (wheelWasOpened)
         {
             if (!AmmoSwitchWheel::Confirm())
-            {
                 AmmoSwitchWheel::Cancel();
-                OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
-            }
         }
         else
             OModSwitch::CycleEquippedOMod(WeaponConfig::OModCategory::Ammunition);
+        REX::INFO("Ammo switch wheel: hotkey release handled through native input");
         return true;
     }
 
@@ -190,22 +240,43 @@ namespace
 
         void PerFrameUpdate() override
         {
-            if (!PendingAmmoSwitch)
-                return;
+            std::optional<PendingAmmoHotkey> pending;
+            bool shouldAttemptWheel = false;
+            {
+                const std::scoped_lock lock{ PendingAmmoSwitchLock };
+                if (!PendingAmmoSwitch)
+                    return;
+                pending = PendingAmmoSwitch;
+                if (!pending->IgnoreRelease && !pending->WheelAttempted &&
+                    std::chrono::steady_clock::now() - pending->PressedAt >= AmmoWheelHoldThreshold)
+                {
+                    PendingAmmoSwitch->WheelAttempted = true;
+                    PendingAmmoSwitch->WheelOpened = true;
+                    pending = PendingAmmoSwitch;
+                    shouldAttemptWheel = true;
+                }
+            }
 
             const auto ui = RE::UI::GetSingleton();
             if (ui && ui->GameIsPaused())
             {
-                PendingAmmoSwitch.reset();
+                {
+                    const std::scoped_lock lock{ PendingAmmoSwitchLock };
+                    if (PendingAmmoSwitch && PendingAmmoSwitch->Keycode == pending->Keycode)
+                        PendingAmmoSwitch.reset();
+                }
                 AmmoSwitchWheel::Cancel();
                 return;
             }
 
-            if (!PendingAmmoSwitch->WheelAttempted &&
-                std::chrono::steady_clock::now() - PendingAmmoSwitch->PressedAt >= AmmoWheelHoldThreshold)
+            if (!shouldAttemptWheel)
+                return;
+
+            if (!AmmoSwitchWheel::Open())
             {
-                PendingAmmoSwitch->WheelAttempted = true;
-                PendingAmmoSwitch->WheelOpened = AmmoSwitchWheel::Open();
+                const std::scoped_lock lock{ PendingAmmoSwitchLock };
+                if (PendingAmmoSwitch && PendingAmmoSwitch->Keycode == pending->Keycode)
+                    PendingAmmoSwitch->WheelOpened = false;
             }
         }
 
@@ -243,13 +314,36 @@ namespace
                 Reload::RequestStop();
         }
     };
+
+    class AmmoSwitchMenuInputHandler :
+        public RE::BSInputEventUser
+    {
+    public:
+        bool ShouldHandleEvent(const RE::InputEvent* Event) override
+        {
+            return AmmoSwitchWheel::IsOpen() && Event &&
+                *Event->eventType == RE::INPUT_EVENT_TYPE::kButton;
+        }
+
+        void OnButtonEvent(const RE::ButtonEvent* Event) override
+        {
+            if (Event && HandleAmmoSwitchHotkey(*Event))
+            {
+                const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
+            }
+        }
+    };
 }
 
 namespace Hooks
 {
     void ResetPendingOModHotkey()
     {
-        PendingAmmoSwitch.reset();
+        {
+            const std::scoped_lock lock{ PendingAmmoSwitchLock };
+            PendingAmmoSwitch.reset();
+            CompletedAmmoSwitchKeycode = 0;
+        }
         AmmoSwitchWheel::Cancel();
     }
 
@@ -318,5 +412,13 @@ namespace Hooks
 
         Controls->handlers.insert(Controls->handlers.begin(), new StopRequestHandler(Controls->data));
         REX::INFO("Input handler installed");
+
+        if (const auto menuControls = RE::MenuControls::GetSingleton())
+        {
+            menuControls->handlers.insert(menuControls->handlers.begin(), new AmmoSwitchMenuInputHandler());
+            REX::INFO("Ammo switch wheel: MenuControls input handler installed for hold release");
+        }
+        else
+            REX::WARN("Ammo switch wheel: MenuControls unavailable; menu-context hold release handler was not installed");
     }
 }

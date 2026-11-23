@@ -23,7 +23,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x000CD80B"
-          }
+          },
+          "icon": "ap"
         },
         {
           "ammo": {
@@ -33,7 +34,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0014DC50"
-          }
+          },
+          "icon": "hollowPoint"
         },
         {
           "ammo": {
@@ -43,7 +45,8 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x000CD80A"
-          }
+          },
+          "icon": "ballistic"
         },
         {
           "ammo": {
@@ -53,9 +56,22 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0014DC51"
-          }
+          },
+          "icon": "ballistic"
+        },
+        {
+          "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000CD808"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x000CD80C"
+          },
+          "icon": "subsonic"
         }
-      ]
+      ],
+      "icon": "ballistic"
     }
   ]
 }

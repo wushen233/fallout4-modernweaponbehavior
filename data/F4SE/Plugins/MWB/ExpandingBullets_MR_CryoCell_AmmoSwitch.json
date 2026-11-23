@@ -23,9 +23,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0005E79F"
-          }
+          },
+          "icon": "cryo"
         }
-      ]
+      ],
+      "icon": "cryo"
     }
   ]
 }

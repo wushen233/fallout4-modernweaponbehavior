@@ -73,7 +73,7 @@ The upstream **Switch fire mode on every gun** option (`FireModeSwitch/bEveryGun
 
 The built-in ammunition OMOD hotkey keeps tap-to-cycle behavior. Holding it for about 350 ms opens a wheel built from the equipped weapon's matching `ammoSwitchProfiles` entry. The current ammo type is always included; other types appear when the player has at least one round in inventory. Aim with the mouse or right stick and release the hotkey to apply the highlighted type through the regular ammo OMOD and reload path.
 
-The wheel draws an equal-sized vector sector for every available type, so its layout follows the configuration instead of a fixed 12-slot artwork timeline. When a profile has more than 12 entries, sectors show index numbers and the highlighted ammo name remains in the center. The runtime wheel movie is generated from `as3/MWBAmmoSwitchWheel.as` with `scripts/publish-ammo-switch-wheel.ps1` and staged at `data/Interface/MWB_AmmoSwitchWheel.swf`.
+The wheel draws an equal-sized vector sector for every available type, so its layout follows the configuration instead of a fixed 12-slot artwork timeline. Its Fallout 76-inspired presentation uses a dark outer rim, black gutters between inset sector faces, 42px cartridge glyphs, a muted selected face with a crisp gold outline, numbered slots, and a centered ammo readout with the weapon's engine-calculated display damage for each ammo type. The game's global `ButtonBarMenu` provides the operation hint. The lower-left ammo tab embeds the same FO76 `BladeFill_mc` vector asset used by VaultUI's favorites wheel, without requiring VaultUI at runtime. Profiles with up to eight entries show ammo names inside each sector; larger profiles rely on the slot numbers and the highlighted ammo name in the center to keep the ring readable. `as3/assets/MWBAmmoSwitchWheel.fla` is the integrated Animate source document, including the favorites blade and all 12 linked ammo icon symbols; publishing reuses it without opening per-icon SVG import dialogs. The runtime wheel movie is built from `as3/MWBAmmoSwitchWheel.as` with `scripts/publish-ammo-switch-wheel.ps1` and staged at `data/Interface/MWB_AmmoSwitchWheel.swf`.
 
 ## Generic OMOD switch groups
 
@@ -142,18 +142,22 @@ On `1.10.163` and `1.11.240`, muzzle and sight groups share the native inventory
 
 Ammo subtype profiles are declared at the top level of any JSON file in `Data/F4SE/Plugins/MWB`. They are matched by the equipped weapon instance's current ammo form, so weapons that use a configured ammo type do not need individual weapon entries. `baseAmmo` is the first cycle entry; each `ammoTypes` entry pairs an `ammo` form with the OMOD that applies it. `weaponBaseAmmo` optionally scopes a profile to weapons whose default ammo matches that form. Use it when the same ammo form appears in multiple profiles with different OMODs; MWB selects the profile matching the equipped weapon's default ammo. Profiles without this field remain global. `baseOMod` is optional when the base ammo is represented by having no OMOD at the ammo attach point. If provided, it is used when cycling back to the configured base state; a weapon already using that base ammo without the OMOD is also accepted as the initial state. An optional profile `keyID` lets an add-on's MCM hotkey select this ammo profile through `MWB.SwitchOModGroup`, alongside the legacy category hotkey.
 
+The optional `icon` string identifies the ammo item's shared display icon. Put it on the profile for `baseAmmo`, or on an individual `ammoTypes` entry for that ammo. It is available to the ammo wheel and other MWB UI components; omitted or unknown values fall back to `ballistic`. Built-in icon keys are `ballistic`, `ap`, `hollowPoint`, `subsonic`, `shotgun`, `energy`, `plasma`, `explosive`, `cryo`, and `incendiary`.
+
 ```json
 {
   "ammoSwitchProfiles": [
     {
       "id": "example.10mm",
+      "icon": "ballistic",
       "weaponBaseAmmo": { "plugin": "Fallout4.esm", "formId": "0x0001F276" },
       "baseAmmo": { "plugin": "Fallout4.esm", "formId": "0x0001F276" },
       "baseOMod": { "plugin": "Example.esp", "formId": "0x00000800" },
       "ammoTypes": [
         {
           "ammo": { "plugin": "Example.esp", "formId": "0x00000810" },
-          "omod": { "plugin": "Example.esp", "formId": "0x00000811" }
+          "omod": { "plugin": "Example.esp", "formId": "0x00000811" },
+          "icon": "ap"
         }
       ]
     }

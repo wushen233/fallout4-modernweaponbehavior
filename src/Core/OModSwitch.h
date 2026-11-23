@@ -31,7 +31,9 @@ namespace OModSwitch
     {
         RE::TESAmmo* Ammo{ nullptr };
         std::string Name;
+        std::string Icon;
         std::uint32_t Count{ 0 };
+        std::string DamageInfo;
         bool Current{ false };
     };
 

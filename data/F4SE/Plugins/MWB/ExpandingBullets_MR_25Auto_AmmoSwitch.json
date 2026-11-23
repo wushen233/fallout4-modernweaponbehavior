@@ -19,9 +19,11 @@
           "omod": {
             "plugin": "MunitionsReloaded.esp",
             "formId": "0x0002F7BF"
-          }
+          },
+          "icon": "ballistic"
         }
-      ]
+      ],
+      "icon": "ballistic"
     }
   ]
 }

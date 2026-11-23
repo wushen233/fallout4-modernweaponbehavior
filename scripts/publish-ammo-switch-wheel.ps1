@@ -18,6 +18,9 @@ for ($i = 0; $i -lt 8; $i++) {
 }
 $as3Root = Join-Path $projectRoot 'as3'
 $templatePath = Join-Path $PSScriptRoot 'publish-ammo-wheel.jsfl'
+$tabSvgPath = Join-Path $as3Root 'assets\FavoritesWheelCategoryBlade.svg'
+$ammoIconSourcePath = Join-Path $as3Root 'assets\fallout4_ammo_icon_symbols.svg'
+$sourceFlaPath = Join-Path $as3Root 'assets\MWBAmmoSwitchWheel.fla'
 $runtimeSwf = Join-Path $projectRoot 'data\Interface\MWB_AmmoSwitchWheel.swf'
 $runId = Get-Date -Format 'yyyyMMdd-HHmmssfff'
 $outputRoot = Join-Path $projectRoot "build\as3\ammo-wheel\$runId"
@@ -35,8 +38,11 @@ if (-not $toolsPath -or -not (Test-Path -LiteralPath $toolsPath -PathType Leaf))
     throw 'Could not find tools.local.json while walking up from the project root.'
 }
 if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $as3Root 'MWBAmmoSwitchWheel.as') -PathType Leaf)) {
-    throw 'Missing the wheel AS3 source or JSFL publisher.'
+    -not (Test-Path -LiteralPath (Join-Path $as3Root 'MWBAmmoSwitchWheel.as') -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $tabSvgPath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $ammoIconSourcePath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $sourceFlaPath -PathType Leaf)) {
+    throw 'Missing the wheel AS3 source, integrated FLA, favorites blade vector, ammo icon symbols, or JSFL publisher.'
 }
 
 $tools = Get-Content -LiteralPath $toolsPath -Raw | ConvertFrom-Json
@@ -46,8 +52,26 @@ if (-not $animatePath -or -not (Test-Path -LiteralPath $animatePath -PathType Le
 }
 
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+[xml]$iconDocument = Get-Content -LiteralPath $ammoIconSourcePath -Raw
+$namespaceManager = [System.Xml.XmlNamespaceManager]::new($iconDocument.NameTable)
+$namespaceManager.AddNamespace('svg', 'http://www.w3.org/2000/svg')
+$iconSymbols = $iconDocument.SelectNodes('/svg:svg/svg:defs/svg:symbol', $namespaceManager)
+if (-not $iconSymbols -or $iconSymbols.Count -ne 12) {
+    throw "Expected 12 SVG ammo symbols, found $($iconSymbols.Count)."
+}
+$ammoIconNames = [System.Collections.Generic.List[string]]::new()
+foreach ($iconSymbol in $iconSymbols) {
+    $iconName = $iconSymbol.GetAttribute('id')
+    if ($iconName -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "Invalid ammo icon symbol id: $iconName"
+    }
+    $ammoIconNames.Add($iconName)
+}
+
 $jsfl = Get-Content -LiteralPath $templatePath -Raw
 $jsfl = $jsfl.Replace('__AS3_PATH__', $as3Root.Replace('\', '/'))
+$jsfl = $jsfl.Replace('__SOURCE_FLA_URI__', (ConvertTo-FileUri $sourceFlaPath))
+$jsfl = $jsfl.Replace('__AMMO_ICON_NAMES__', (ConvertTo-Json -InputObject $ammoIconNames.ToArray() -Compress))
 $jsfl = $jsfl.Replace('__FLA_URI__', (ConvertTo-FileUri $flaPath))
 $jsfl = $jsfl.Replace('__LOG_URI__', (ConvertTo-FileUri $resultLog))
 $jsfl = $jsfl.Replace('__OUTPUT_URI__', (ConvertTo-FileUri $outputLog))
@@ -71,6 +95,9 @@ if ($result.Count -lt 1 -or $result[0] -ne 'OK') {
 if (-not (Test-Path -LiteralPath $publishedSwf -PathType Leaf) -or
     (Get-Item -LiteralPath $publishedSwf).LastWriteTime -lt $startedAt.AddSeconds(-2)) {
     throw "Animate reported success without producing a fresh SWF: $publishedSwf"
+}
+if ((Get-Item -LiteralPath $publishedSwf).Length -lt 4096) {
+    throw "Animate produced an unusually small SWF; the AS3 document class may not have compiled: $publishedSwf"
 }
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $runtimeSwf) -Force | Out-Null
