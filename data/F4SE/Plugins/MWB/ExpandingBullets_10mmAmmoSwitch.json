@@ -46,6 +46,17 @@
         },
         {
           "ammo": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F97"
+          },
+          "omod": {
+            "plugin": "MunitionsReloaded.esp",
+            "formId": "0x00162F98"
+          },
+          "icon": "subsonic"
+        },
+        {
+          "ammo": {
             "plugin": "Munitions - An Ammo Expansion.esl",
             "formId": "0x000006EE"
           },
@@ -87,17 +98,6 @@
             "formId": "0x0012B915"
           },
           "icon": "ballistic"
-        },
-        {
-          "ammo": {
-            "plugin": "MunitionsReloaded.esp",
-            "formId": "0x00162F97"
-          },
-          "omod": {
-            "plugin": "MunitionsReloaded.esp",
-            "formId": "0x00162F98"
-          },
-          "icon": "subsonic"
         }
       ],
       "weaponBaseAmmo": {

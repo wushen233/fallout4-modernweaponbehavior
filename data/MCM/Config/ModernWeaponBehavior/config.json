@@ -187,6 +187,24 @@
           "valueOptions": {
             "sourceType": "ModSettingBool"
           }
+        },
+        {
+          "id": "bEnabled:FusionCharge",
+          "text": "$MWB_MCM_Fire_charged_shots_on_full_charge",
+          "type": "switcher",
+          "help": "$MWB_MCM_When_a_charged_weapon_reaches_full_charge_it_fires_automatically",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
+        },
+        {
+          "id": "bEnabled:SemiAutoHold",
+          "text": "$MWB_MCM_Hold_to_fire_semi_automatic",
+          "type": "switcher",
+          "help": "$MWB_MCM_Holding_the_trigger_keeps_semi_automatic_guns_firing_at_their_fire_rate",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
         }
       ]
     },
