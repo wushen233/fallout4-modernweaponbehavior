@@ -187,7 +187,7 @@ namespace SlideLock
         }
 
         static const std::vector<RE::BSFixedString> NoNodes;
-        UpdateCulledNodes(Player, !Rule ? NoNodes : Held ? Rule->HideNodes : Rule->ShowNodes);
+        UpdateCulledNodes(Player, !Rule ? NoNodes : Locked ? Rule->HideNodes : Rule->ShowNodes);
 
         const float Target = Locked ? 1.0f : 0.0f;
         const float Seconds = !Rule ? 0.0f : Locked ? Rule->BlendIn : Rule->BlendOut;
