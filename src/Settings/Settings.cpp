@@ -30,6 +30,7 @@ namespace
     REX::TIniSetting<bool> FireModeEveryGunSetting{ "FireModeSwitch", "bEveryGun", false };
     REX::TIniSetting<bool> PipboyAmmoReloadAnimationSetting{ "AmmoSwitch", "bPipboyReloadAnimation", false };
     REX::TIniSetting<bool> AutoSwitchAmmoWhenEmptySetting{ "AmmoSwitch", "bAutoSwitchWhenEmpty", false };
+    REX::TIniSetting<bool> AmmoSwitchWheelToggleModeSetting{ "AmmoSwitch", "bToggleWheel", false };
     REX::TIniSetting<bool> WeaponHUDSetting{ "WeaponHUD", "bEnabled", true };
     REX::TIniSetting<bool> AmmoCheckEveryGunSetting{ "AmmoCheck", "bEveryGun", false };
     REX::TIniSetting<bool> ThirdPersonSprintFOVSetting{ "ThirdPersonSprintFOV", "bEnabled", true };
@@ -81,6 +82,7 @@ namespace
         McmBool{ "FireModeSwitch", "bEveryGun", &FireModeEveryGunSetting },
         McmBool{ "AmmoSwitch", "bPipboyReloadAnimation", &PipboyAmmoReloadAnimationSetting },
         McmBool{ "AmmoSwitch", "bAutoSwitchWhenEmpty", &AutoSwitchAmmoWhenEmptySetting },
+        McmBool{ "AmmoSwitch", "bToggleWheel", &AmmoSwitchWheelToggleModeSetting },
         McmBool{ "WeaponHUD", "bEnabled", &WeaponHUDSetting },
         McmBool{ "AmmoCheck", "bEveryGun", &AmmoCheckEveryGunSetting },
         McmBool{ "ThirdPersonSprintFOV", "bEnabled", &ThirdPersonSprintFOVSetting },
@@ -233,6 +235,11 @@ namespace Settings
     bool AutoSwitchAmmoWhenEmpty()
     {
         return AutoSwitchAmmoWhenEmptySetting.GetValue();
+    }
+
+    bool AmmoSwitchWheelToggleMode()
+    {
+        return AmmoSwitchWheelToggleModeSetting.GetValue();
     }
 
     bool WeaponHUD()

@@ -15,12 +15,16 @@
 #include "AmmoSwitchWheel.h"
 
 #include "Core/OModSwitch.h"
+#include "Settings/Settings.h"
 
 #include <F4SE/API.h>
 
 #include <RE/B/BSScaleformManager.h>
+#include <RE/Fallout.h>
 #include <RE/G/GameMenuBase.h>
 #include <RE/H/HUDColorTypes.h>
+#include <RE/U/UI.h>
+#include <RE/U/UIShaderColors.h>
 
 #include <atomic>
 #include <mutex>
@@ -47,10 +51,89 @@ namespace
     std::atomic<std::uint64_t> StickGeneration{ 0 };
     std::atomic<float> StickX{ 0.0f };
     std::atomic<float> StickY{ 0.0f };
+    std::atomic<std::int32_t> PendingSelectionDelta{ 0 };
+    std::atomic<bool> PendingWheelConfirm{ false };
     Scaleform::Ptr<RE::IMenu> HiddenHUD;
     Scaleform::Ptr<Scaleform::GFx::Movie> HiddenHUDMovie;
     bool HUDMenuWasVisible{};
     bool HUDMovieWasVisible{};
+
+    using ButtonBarCache = bool (*)(RE::GameMenuBase*);
+    ButtonBarCache OriginalButtonBarCache{};
+
+    [[nodiscard]] bool IsWheelActive()
+    {
+        const auto state = CurrentWheelState.load(std::memory_order_acquire);
+        return state == WheelState::Opening || state == WheelState::Open || state == WheelState::Closing;
+    }
+
+    bool NormalizeButtonBarForCache(RE::GameMenuBase& menu)
+    {
+        struct Change
+        {
+            RE::BSGFxShaderFXTarget* target;
+            RE::UIShaderColors original;
+        };
+
+        std::vector<Change> changes;
+        auto visit = [&](auto&& self, RE::BSGFxShaderFXTarget* target) -> void {
+            if (!target)
+                return;
+
+            Value name;
+            target->GetMember("name", &name);
+            const std::string_view targetName = name.IsString() && name.GetString() ? name.GetString() : "";
+            if ((targetName == "ButtonHintBar_mc" || targetName == "ButtonBarHolder_mc") &&
+                std::ranges::none_of(changes, [target](const auto& change) { return change.target == target; }))
+            {
+                changes.push_back({ target, target->shaderFX });
+                target->shaderFX.colorMultipliers.r = 1.0F;
+                target->shaderFX.colorMultipliers.g = 1.0F;
+                target->shaderFX.colorMultipliers.b = 1.0F;
+                target->shaderFX.colorBrightness = 1.0F;
+            }
+
+            for (auto* child : target->shaderFXObjects)
+                self(self, child);
+        };
+
+        for (auto* target : menu.shaderFXObjects)
+            visit(visit, target);
+        visit(visit, menu.filterHolder.get());
+        visit(visit, menu.buttonHintBar.get());
+
+        if (!changes.empty()) {
+            static std::once_flag logged;
+            std::call_once(logged, [&] {
+                REX::INFO("Ammo switch wheel: normalized {} global button bar cache target(s)", changes.size());
+            });
+        }
+
+        const bool result = OriginalButtonBarCache ? OriginalButtonBarCache(&menu) : false;
+
+        for (const auto& change : changes)
+            change.target->shaderFX = change.original;
+
+        return result;
+    }
+
+    bool CacheButtonBar(RE::GameMenuBase* menu)
+    {
+        if (!menu || !IsWheelActive())
+            return OriginalButtonBarCache ? OriginalButtonBarCache(menu) : false;
+
+        return NormalizeButtonBarForCache(*menu);
+    }
+
+    void InstallButtonBarHook()
+    {
+        static std::once_flag once;
+        std::call_once(once, [] {
+            REL::Relocation<std::uintptr_t> buttonBar{ RE::VTABLE::ButtonBarMenu[0] };
+            OriginalButtonBarCache = reinterpret_cast<ButtonBarCache>(buttonBar.write_vfunc(0x10, &CacheButtonBar));
+            REX::INFO("Ammo switch wheel: global button bar cache hook installed");
+        });
+    }
 
     void HideHUD()
     {
@@ -107,19 +190,21 @@ namespace
                 return;
             }
 
-            if (filterHolder)
+            // Unlike FavoritesMenu, this standalone movie does not receive a
+            // native filterHolder during LoadMovie. Keep the same target
+            // shape by creating the root target before SetUpButtonBar; this
+            // is the path that makes the shared ButtonBarMenu visible.
+            if (!filterHolder && uiMovie)
             {
-                Value hintSource;
-                if (filterHolder->GetMember("AmmoWheelHintSource", &hintSource) && hintSource.IsDisplayObject())
-                {
-                    SetUpButtonBar(*filterHolder, "AmmoWheelHintSource", RE::HUDColorTypes::kGameplayHUDColor);
-                    REX::INFO("Ammo switch wheel: registered native global button bar hints");
-                }
-                else
-                {
-                    REX::WARN("Ammo switch wheel: native global button bar hint source is missing");
-                }
+                filterHolder = std::make_unique<RE::BSGFxShaderFXTarget>(*uiMovie, "root1");
+                filterHolder->CreateAndSetFiltersToHUD(RE::HUDColorTypes::kGameplayHUDColor);
+                REX::INFO("Ammo switch wheel: created native button hint target fallback");
             }
+
+            if (!EnsureNativeWheelShaderTarget())
+                REX::WARN("Ammo switch wheel: nativeContent target is missing; native wheel shadow is disabled");
+
+            EnsureNativeButtonBar();
 
             Value names;
             Value counts;
@@ -141,7 +226,7 @@ namespace
             }
 
             selectedIndex.store(currentIndex, std::memory_order_relaxed);
-            const auto setOptionsSucceeded = menuObj.Invoke("SetOptions", std::array<Value, 5>{ std::move(names), std::move(counts), std::move(icons), std::move(damages), Value{ currentIndex } });
+            const auto setOptionsSucceeded = menuObj.Invoke("SetOptions", std::array<Value, 6>{ std::move(names), std::move(counts), std::move(icons), std::move(damages), Value{ currentIndex }, Value{ Settings::AmmoSwitchWheelToggleMode() } });
             REX::INFO("Ammo switch wheel: passed {} dynamic ammo sectors to Scaleform (GFx invoke return={})", options.size(), setOptionsSucceeded);
             optionDiagnosticsPending = true;
         }
@@ -149,6 +234,7 @@ namespace
         ~AmmoSwitchMenu() override
         {
             RestoreGameplayHandlers();
+            RestoreGlobalButtonBar();
             if (uiMovie)
             {
                 uiMovie->SetCaptureThread(Scaleform::GetCurrentThreadId());
@@ -162,6 +248,8 @@ namespace
         {
             HideHUD();
             GameMenuBase::OnAddedToMenuStack();
+            EnsureNativeButtonBar();
+            NormalizeGlobalButtonBar();
             CurrentWheelState.store(WheelState::Open, std::memory_order_release);
             SetGameplayHandlersEnabled(false);
         }
@@ -169,6 +257,7 @@ namespace
         void OnRemovedFromMenuStack() override
         {
             RestoreGameplayHandlers();
+            RestoreGlobalButtonBar();
             GameMenuBase::OnRemovedFromMenuStack();
             RestoreHUD();
             CurrentWheelState.store(WheelState::Closed, std::memory_order_release);
@@ -177,6 +266,9 @@ namespace
         void AdvanceMovie(float a_timeDelta, std::uint64_t a_time) override
         {
             GameMenuBase::AdvanceMovie(a_timeDelta, a_time);
+            EnsureNativeButtonBar();
+            EnsureNativeWheelShaderTarget();
+            NormalizeGlobalButtonBar();
 
             if (!uiMovie || !menuObj.IsObject())
                 return;
@@ -199,6 +291,10 @@ namespace
                     Value{ static_cast<double>(StickX.load(std::memory_order_relaxed)) },
                     Value{ static_cast<double>(StickY.load(std::memory_order_relaxed)) } });
             }
+
+            const auto selectionDelta = PendingSelectionDelta.exchange(0, std::memory_order_acq_rel);
+            if (selectionDelta != 0)
+                menuObj.Invoke("MoveSelection", std::array<Value, 1>{ Value{ selectionDelta } });
 
             Value selected;
             if (menuObj.Invoke("GetSelectedIndex", &selected))
@@ -226,6 +322,18 @@ namespace
                         REX::INFO("Ammo switch wheel: selection index {} -> {}", previous, *index);
                 }
             }
+
+            Value clickConfirmed;
+            const bool mouseConfirmed = menuObj.Invoke("ConsumeClickConfirm", &clickConfirmed) &&
+                clickConfirmed.IsBoolean() && clickConfirmed.GetBoolean();
+            const bool keyboardConfirmed = PendingWheelConfirm.exchange(false, std::memory_order_acq_rel);
+            if (mouseConfirmed || keyboardConfirmed)
+            {
+                REX::INFO("Ammo switch wheel: {} confirmation requested",
+                    mouseConfirmed ? "mouse" : "keyboard");
+                if (!AmmoSwitchWheel::Confirm())
+                    AmmoSwitchWheel::Cancel();
+            }
         }
 
         [[nodiscard]] RE::TESAmmo* SelectedAmmo()
@@ -242,6 +350,157 @@ namespace
         }
 
     private:
+        struct ButtonBarColorState
+        {
+            RE::BSGFxShaderFXTarget* target;
+            float r;
+            float g;
+            float b;
+            float brightness;
+        };
+
+        void NormalizeGlobalButtonBar()
+        {
+            if (!buttonHintBar)
+                return;
+            const auto ui = RE::UI::GetSingleton();
+            if (!ui)
+                return;
+            const auto buttonBar = ui->GetMenu("ButtonBarMenu");
+            if (!buttonBar)
+                return;
+
+            auto* menu = static_cast<RE::GameMenuBase*>(buttonBar.get());
+            bool changed = false;
+            auto normalize = [&](auto&& self, RE::BSGFxShaderFXTarget* target) -> void {
+                if (!target)
+                    return;
+
+                Value name;
+                target->GetMember("name", &name);
+                const std::string_view targetName = name.IsString() && name.GetString() ? name.GetString() : "";
+                if (targetName == "ButtonHintBar_mc" || targetName == "ButtonBarHolder_mc")
+                {
+                    if (std::ranges::none_of(globalButtonBarColors, [target](const auto& state) { return state.target == target; }))
+                    {
+                        globalButtonBarColors.push_back({
+                            target,
+                            target->shaderFX.colorMultipliers.r,
+                            target->shaderFX.colorMultipliers.g,
+                            target->shaderFX.colorMultipliers.b,
+                            target->shaderFX.colorBrightness
+                        });
+                        REX::INFO("Ammo switch wheel: normalized global button bar target {}", targetName);
+                    }
+
+                    if (target->shaderFX.colorMultipliers.r != 1.0F ||
+                        target->shaderFX.colorMultipliers.g != 1.0F ||
+                        target->shaderFX.colorMultipliers.b != 1.0F ||
+                        target->shaderFX.colorBrightness != 1.0F)
+                    {
+                        target->shaderFX.colorMultipliers.r = 1.0F;
+                        target->shaderFX.colorMultipliers.g = 1.0F;
+                        target->shaderFX.colorMultipliers.b = 1.0F;
+                        target->shaderFX.colorBrightness = 1.0F;
+                        changed = true;
+                    }
+                }
+
+                for (auto* child : target->shaderFXObjects)
+                    self(self, child);
+            };
+
+            for (auto* target : menu->shaderFXObjects)
+                normalize(normalize, target);
+            normalize(normalize, menu->filterHolder.get());
+            normalize(normalize, menu->buttonHintBar.get());
+
+            if (changed)
+            {
+                // Changing shaderFX after the stock cache has run does not
+                // recolor already cached text quads. Re-enter the complete
+                // ButtonBarMenu cache chain once so the normalized receiver
+                // is used to build the native bar, just like FavoritesMenu.
+                menu->CacheShaderFXQuadsForRenderer_Impl();
+            }
+        }
+
+        void RestoreGlobalButtonBar()
+        {
+            const auto ui = RE::UI::GetSingleton();
+            const auto buttonBar = ui ? ui->GetMenu("ButtonBarMenu") : nullptr;
+            auto* menu = buttonBar ? static_cast<RE::GameMenuBase*>(buttonBar.get()) : nullptr;
+            auto isCurrent = [&](auto&& self, RE::BSGFxShaderFXTarget* target, RE::BSGFxShaderFXTarget* wanted) -> bool {
+                if (!target)
+                    return false;
+                if (target == wanted)
+                    return true;
+                return std::ranges::any_of(target->shaderFXObjects, [&](auto* child) { return self(self, child, wanted); });
+            };
+
+            for (const auto& state : globalButtonBarColors)
+            {
+                if (!state.target || !menu)
+                    continue;
+                const bool current = isCurrent(isCurrent, menu->filterHolder.get(), state.target) ||
+                    isCurrent(isCurrent, menu->buttonHintBar.get(), state.target) ||
+                    std::ranges::any_of(menu->shaderFXObjects, [&](auto* target) { return isCurrent(isCurrent, target, state.target); });
+                if (!current)
+                    continue;
+                state.target->shaderFX.colorMultipliers.r = state.r;
+                state.target->shaderFX.colorMultipliers.g = state.g;
+                state.target->shaderFX.colorMultipliers.b = state.b;
+                state.target->shaderFX.colorBrightness = state.brightness;
+            }
+            globalButtonBarColors.clear();
+        }
+
+        void EnsureNativeButtonBar()
+        {
+            // FavoritesMenu registers its data source only after the native
+            // GameMenuBase stack setup has created filterHolder. Creating a
+            // root1 fallback in the constructor takes a different shader
+            // path and tints the shared ButtonBarMenu receiver incorrectly.
+            if (buttonHintBar || !filterHolder)
+                return;
+
+            Value hintSource;
+            if (filterHolder->GetMember("AmmoWheelHintSource", &hintSource) && hintSource.IsDisplayObject())
+            {
+                // Match FavoritesMenu's global registration. The cache hook
+                // below temporarily normalizes the shared receiver while
+                // ButtonBarMenu builds its native quads.
+                SetUpButtonBar(*filterHolder, "AmmoWheelHintSource", RE::HUDColorTypes::kGameplayHUDColor);
+                REX::INFO("Ammo switch wheel: registered native global button bar hints");
+            }
+            else
+            {
+                REX::WARN("Ammo switch wheel: native global button bar hint source is missing");
+            }
+        }
+
+        bool EnsureNativeWheelShaderTarget()
+        {
+            if (wheelShaderTarget || !uiMovie || !menuObj.IsObject())
+                return wheelShaderTarget != nullptr;
+
+            Value nativeContent;
+            if (!menuObj.GetMember("nativeContent", &nativeContent) || !nativeContent.IsDisplayObject())
+                return false;
+
+            wheelShaderTarget = std::make_unique<RE::BSGFxShaderFXTarget>(*uiMovie, "root1.nativeContent");
+            // Keep the wheel's authored gold/cream colors while enabling the
+            // engine's alpha-based shadow descriptor for its graphics and text.
+            // The global button bar remains outside this target.
+            wheelShaderTarget->CreateAndSetFiltersToColor(255, 255, 255, 1.0F);
+            wheelShaderTarget->shaderFX.enabledStates.set(RE::UIShaderColors::Flags::kUseAlphaForDropshadow);
+            shaderFXObjects.push_back(wheelShaderTarget.get());
+            REX::INFO("Ammo switch wheel: native wheel shader target registered, shaderFXObjects={}, alphaDropShadow={}",
+                shaderFXObjects.size(),
+                wheelShaderTarget->shaderFX.enabledStates.all(RE::UIShaderColors::Flags::kUseAlphaForDropshadow));
+            return true;
+        }
+
         void SetGameplayHandlersEnabled(bool a_enabled)
         {
             const auto controls = RE::PlayerControls::GetSingleton();
@@ -279,6 +538,8 @@ namespace
 
         std::vector<OModSwitch::AmmoSwitchOption> options;
         std::vector<std::pair<RE::PlayerInputHandler*, bool>> gameplayHandlerStates;
+        std::vector<ButtonBarColorState> globalButtonBarColors;
+        std::unique_ptr<RE::BSGFxShaderFXTarget> wheelShaderTarget;
         std::atomic<std::int32_t> selectedIndex{ -1 };
         std::uint64_t lastStickGeneration{ 0 };
         bool optionDiagnosticsPending{ false };
@@ -304,6 +565,7 @@ namespace AmmoSwitchWheel
 {
     void Initialize()
     {
+        InstallButtonBarHook();
         if (const auto ui = RE::UI::GetSingleton())
             ui->RegisterMenu(MenuName.data(), [](const RE::UIMessage&) -> RE::IMenu* { return new AmmoSwitchMenu(); });
     }
@@ -331,6 +593,8 @@ namespace AmmoSwitchWheel
         const auto generation = WheelGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
         StickX.store(0.0f, std::memory_order_relaxed);
         StickY.store(0.0f, std::memory_order_relaxed);
+        PendingSelectionDelta.store(0, std::memory_order_relaxed);
+        PendingWheelConfirm.store(false, std::memory_order_relaxed);
         StickGeneration.fetch_add(1, std::memory_order_relaxed);
         tasks->AddTask([generation]() {
             if (generation != WheelGeneration.load(std::memory_order_relaxed) ||
@@ -375,6 +639,18 @@ namespace AmmoSwitchWheel
         StickX.store(a_x, std::memory_order_relaxed);
         StickY.store(a_y, std::memory_order_relaxed);
         StickGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void MoveSelection(int a_delta)
+    {
+        if (a_delta != 0 && IsOpen())
+            PendingSelectionDelta.fetch_add(a_delta, std::memory_order_release);
+    }
+
+    void RequestConfirm()
+    {
+        if (IsOpen())
+            PendingWheelConfirm.store(true, std::memory_order_release);
     }
 
     bool Confirm()

@@ -38,6 +38,9 @@ import Shared.AS3.BSButtonHintData;
         private var labels:Sprite;
         private var slotNumbers:Sprite;
         private var center:Sprite;
+        // Public so the native BSGFxShaderFXTarget can bind only the wheel
+        // artwork; the hidden hint source remains outside that target.
+        public var nativeContent:Sprite;
         private var categoryTab:Sprite;
         private var categoryTabText:TextField;
         private var hintSource:AmmoWheelHintSource;
@@ -51,6 +54,8 @@ import Shared.AS3.BSButtonHintData;
         private var damages:Array = [];
         private var selectedIndex:int = -1;
         private var currentIndex:int = -1;
+        private var clickConfirmed:Boolean = false;
+        private var toggleMode:Boolean = false;
         private var centerX:Number;
         private var centerY:Number;
 
@@ -60,14 +65,17 @@ import Shared.AS3.BSButtonHintData;
             addEventListener(Event.ADDED_TO_STAGE, onAddedToStage, false, 0, true);
         }
 
-        public function SetOptions(a_names:Array, a_counts:Array, a_icons:Array, a_damages:Array, a_currentIndex:int):void
+        public function SetOptions(a_names:Array, a_counts:Array, a_icons:Array, a_damages:Array, a_currentIndex:int, a_toggleMode:Boolean = false):void
         {
             names = a_names ? a_names.concat() : [];
             counts = a_counts ? a_counts.concat() : [];
             icons = a_icons ? a_icons.concat() : [];
             damages = a_damages ? a_damages.concat() : [];
             currentIndex = a_currentIndex;
+            toggleMode = a_toggleMode;
             selectedIndex = currentIndex >= 0 && currentIndex < names.length ? currentIndex : 0;
+            if (hintSource && hintSource.SetButtonHintData != null)
+                setGlobalHints();
             render();
         }
 
@@ -78,9 +86,27 @@ import Shared.AS3.BSButtonHintData;
             selectDirection(a_x, -a_y);
         }
 
+        public function MoveSelection(a_delta:int):void
+        {
+            if (names.length == 0 || a_delta == 0)
+                return;
+
+            selectedIndex = (selectedIndex + a_delta) % names.length;
+            if (selectedIndex < 0)
+                selectedIndex += names.length;
+            render();
+        }
+
         public function GetSelectedIndex():int
         {
             return selectedIndex;
+        }
+
+        public function ConsumeClickConfirm():Boolean
+        {
+            const confirmed:Boolean = clickConfirmed;
+            clickConfirmed = false;
+            return confirmed;
         }
 
         public function DebugInfo():String
@@ -103,18 +129,23 @@ import Shared.AS3.BSButtonHintData;
             labels = new Sprite();
             slotNumbers = new Sprite();
             center = new Sprite();
+            nativeContent = new Sprite();
+            nativeContent.mouseEnabled = false;
+            nativeContent.mouseChildren = false;
             sectors.mouseEnabled = false;
             labels.mouseEnabled = false;
             slotNumbers.mouseEnabled = false;
             center.mouseEnabled = false;
-            addChild(sectors);
-            addChild(labels);
-            addChild(slotNumbers);
-            addChild(center);
+            addChild(nativeContent);
+            nativeContent.addChild(sectors);
+            nativeContent.addChild(labels);
+            nativeContent.addChild(slotNumbers);
+            nativeContent.addChild(center);
             setupCategoryTab();
             setupGlobalHintSource();
 
             stage.addEventListener(MouseEvent.MOUSE_MOVE, handleStageMouseMove, false, 0, true);
+            stage.addEventListener(MouseEvent.CLICK, handleStageClick, false, 0, true);
             stage.addEventListener(Event.RESIZE, onResize, false, 0, true);
             render();
         }
@@ -134,6 +165,18 @@ import Shared.AS3.BSButtonHintData;
             if (dx * dx + dy * dy <= DEAD_ZONE * DEAD_ZONE)
                 return;
             selectDirection(dx, dy);
+        }
+
+        private function handleStageClick(a_event:MouseEvent):void
+        {
+            const dx:Number = stage.mouseX - centerX;
+            const dy:Number = stage.mouseY - centerY;
+            const distanceSquared:Number = dx * dx + dy * dy;
+            if (distanceSquared < INNER_RADIUS * INNER_RADIUS || distanceSquared > OUTER_RADIUS * OUTER_RADIUS)
+                return;
+
+            selectDirection(dx, dy);
+            clickConfirmed = true;
         }
 
         private function selectDirection(a_x:Number, a_y:Number):void
@@ -272,7 +315,7 @@ import Shared.AS3.BSButtonHintData;
             title.embedFonts = true;
             title.text = name;
             title.setTextFormat(title.defaultTextFormat);
-            title.filters = [new DropShadowFilter(1, 45, 0x000000, 0.9, 2, 2, 2, 1)];
+            title.filters = [new DropShadowFilter(1, 45, 0x000000, 0.42, 2, 2, 1, 1, false, false, false)];
             title.mouseEnabled = false;
             center.addChild(title);
 
@@ -287,7 +330,7 @@ import Shared.AS3.BSButtonHintData;
             quantity.embedFonts = true;
             quantity.text = "(" + String(counts[selectedIndex]) + ")";
             quantity.setTextFormat(quantity.defaultTextFormat);
-            quantity.filters = [new DropShadowFilter(1, 45, 0x000000, 0.9, 2, 2, 2, 1)];
+            quantity.filters = [new DropShadowFilter(1, 45, 0x000000, 0.42, 2, 2, 1, 1, false, false, false)];
             quantity.mouseEnabled = false;
             center.addChild(quantity);
 
@@ -299,7 +342,7 @@ import Shared.AS3.BSButtonHintData;
             damage.defaultTextFormat = centeredFormat(18, CREAM, true);
             damage.text = translate("$MWB_AmmoWheel_Damage") + ": " + damageAt(selectedIndex);
             damage.setTextFormat(damage.defaultTextFormat);
-            damage.filters = [new DropShadowFilter(1, 45, 0x000000, 0.9, 2, 2, 2, 1)];
+            damage.filters = [new DropShadowFilter(1, 45, 0x000000, 0.42, 2, 2, 1, 1, false, false, false)];
             damage.mouseEnabled = false;
             center.addChild(damage);
         }
@@ -348,6 +391,9 @@ import Shared.AS3.BSButtonHintData;
             categoryTabText.text = translate("$MWB_AmmoWheel_Category");
             categoryTabText.setTextFormat(categoryTabText.defaultTextFormat);
             categoryTab.addChild(categoryTabText);
+            // Keep the lower-left category blade outside the native wheel
+            // target.  Its bottom edge would otherwise expand the target
+            // bounds into the global button bar and darken that footer.
             addChild(categoryTab);
             positionCategoryTab();
         }
@@ -358,10 +404,7 @@ import Shared.AS3.BSButtonHintData;
             hintSource.name = "AmmoWheelHintSource";
             hintSource.visible = false;
             addChild(hintSource);
-            const hints:Vector.<BSButtonHintData> = new Vector.<BSButtonHintData>();
-            const hint:BSButtonHintData = new BSButtonHintData("$MWB_AmmoWheel_SelectHint", "", "", "", 1, null);
-            hint.ButtonEnabled = false;
-            hints.push(hint);
+            const hints:Vector.<BSButtonHintData> = buildHintData();
             if (hintSource.SetButtonHintData != null)
                 hintSource.SetButtonHintData(hints);
             else
@@ -373,11 +416,32 @@ import Shared.AS3.BSButtonHintData;
             if (hintSource == null || hintSource.SetButtonHintData == null)
                 return;
             removeEventListener(Event.ENTER_FRAME, submitGlobalHints);
-            const hints:Vector.<BSButtonHintData> = new Vector.<BSButtonHintData>();
-            const hint:BSButtonHintData = new BSButtonHintData("$MWB_AmmoWheel_SelectHint", "", "", "", 1, null);
-            hint.ButtonEnabled = false;
-            hints.push(hint);
+            const hints:Vector.<BSButtonHintData> = buildHintData();
             hintSource.SetButtonHintData(hints);
+        }
+
+        private function setGlobalHints():void
+        {
+            const hints:Vector.<BSButtonHintData> = buildHintData();
+            hintSource.SetButtonHintData(hints);
+        }
+
+        private function buildHintData():Vector.<BSButtonHintData>
+        {
+            const hints:Vector.<BSButtonHintData> = new Vector.<BSButtonHintData>();
+            hints.push(makeHintData("Mousewheel", "$MWB_AmmoWheel_MoveHint"));
+            hints.push(makeHintData("Space", toggleMode ? "$MWB_AmmoWheel_ConfirmHint" : "$MWB_AmmoWheel_ConfirmReleaseHint"));
+            hints.push(makeHintData("X / Tab", "$MWB_AmmoWheel_CloseHint"));
+            return hints;
+        }
+
+        private function makeHintData(a_key:String, a_label:String):BSButtonHintData
+        {
+            // Keep global ButtonBarMenu hints enabled so their text uses the
+            // same bright state as FavoritesMenu. A missing callback does not
+            // make these informational rows actionable, but ButtonEnabled=false
+            // applies the game's disabled/dimmed text treatment.
+            return new BSButtonHintData(a_label, a_key, "", "", 1, null);
         }
 
         private function positionCategoryTab():void

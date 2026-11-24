@@ -43,6 +43,8 @@ namespace Settings
 
     [[nodiscard]] bool AutoSwitchAmmoWhenEmpty();
 
+    [[nodiscard]] bool AmmoSwitchWheelToggleMode();
+
     [[nodiscard]] bool WeaponHUD();
 
     [[nodiscard]] bool AmmoCheckEveryGun();
