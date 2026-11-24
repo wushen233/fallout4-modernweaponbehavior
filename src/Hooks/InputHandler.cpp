@@ -18,6 +18,7 @@
 #include "Melee/HoldBlock.h"
 #include "Reload/LoopReload.h"
 #include "Reload/SightedReload.h"
+#include "Settings/Settings.h"
 #include "Weapon/ScopeSway.h"
 
 #include <F4SE/InputMap.h>
@@ -82,6 +83,7 @@ namespace
         bool WheelAttempted{ false };
         bool WheelOpened{ false };
         bool IgnoreRelease{ false };
+        bool KeepWheelOpenOnRelease{ false };
     };
 
     std::mutex PendingAmmoSwitchLock;
@@ -176,7 +178,7 @@ namespace
                 }
                 else
                 {
-                    PendingAmmoSwitch = PendingAmmoHotkey{ *keycode, std::chrono::steady_clock::now() };
+                    PendingAmmoSwitch = PendingAmmoHotkey{ *keycode, std::chrono::steady_clock::now(), false, false, false, Settings::AmmoSwitchWheelToggleMode() };
                     CompletedAmmoSwitchKeycode = 0;
                     if (wheelAlreadyOpen)
                     {
@@ -212,6 +214,11 @@ namespace
         const bool wheelWasOpened = completed->WheelOpened || AmmoSwitchWheel::IsOpen();
         if (wheelWasOpened)
         {
+            if (completed->KeepWheelOpenOnRelease)
+            {
+                REX::INFO("Ammo switch wheel: hold released; keeping wheel open");
+                return true;
+            }
             if (!AmmoSwitchWheel::Confirm())
                 AmmoSwitchWheel::Cancel();
         }
@@ -327,7 +334,48 @@ namespace
 
         void OnButtonEvent(const RE::ButtonEvent* Event) override
         {
-            if (Event && HandleAmmoSwitchHotkey(*Event))
+            if (!Event)
+                return;
+
+            if (Event->QJustPressed() && Event->device.get() == RE::INPUT_DEVICE::kMouse)
+            {
+                if (Event->QIDCode() == static_cast<std::uint32_t>(RE::BS_BUTTON_CODE::kWheelUp))
+                {
+                    AmmoSwitchWheel::MoveSelection(-1);
+                    const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
+                    return;
+                }
+                if (Event->QIDCode() == static_cast<std::uint32_t>(RE::BS_BUTTON_CODE::kWheelDown))
+                {
+                    AmmoSwitchWheel::MoveSelection(1);
+                    const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
+                    return;
+                }
+            }
+
+            if (Event->QJustPressed() && Event->device.get() == RE::INPUT_DEVICE::kKeyboard &&
+                Event->QIDCode() == static_cast<std::uint32_t>(RE::BS_BUTTON_CODE::kSpace))
+            {
+                AmmoSwitchWheel::RequestConfirm();
+                const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
+                return;
+            }
+
+            if (Event->QJustPressed() && Event->device.get() == RE::INPUT_DEVICE::kKeyboard &&
+                Event->QIDCode() == static_cast<std::uint32_t>(RE::BS_BUTTON_CODE::kTab))
+            {
+                {
+                    const std::scoped_lock lock{ PendingAmmoSwitchLock };
+                    if (PendingAmmoSwitch)
+                        CompletedAmmoSwitchKeycode = PendingAmmoSwitch->Keycode;
+                    PendingAmmoSwitch.reset();
+                }
+                AmmoSwitchWheel::Cancel();
+                const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
+                return;
+            }
+
+            if (HandleAmmoSwitchHotkey(*Event))
             {
                 const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
             }

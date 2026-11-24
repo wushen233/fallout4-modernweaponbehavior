@@ -4,6 +4,7 @@ package
     import flash.display.Graphics;
     import flash.display.Shape;
     import flash.display.Sprite;
+    import flash.filters.DropShadowFilter;
     import flash.geom.ColorTransform;
     import flash.utils.getDefinitionByName;
 
@@ -46,6 +47,7 @@ package
                                 a_fill & 0xFF,
                                 0);
                             asset.transform.colorTransform = color;
+                            container.filters = [new DropShadowFilter(1, 45, 0x000000, 0.6, 2, 2, 1, 1, false, false, false)];
                             return container;
                         }
                     }
@@ -59,6 +61,7 @@ package
 
             const fallback:Shape = new Shape();
             draw(fallback.graphics, 0, 0, a_icon, a_targetSize / 36, a_fill);
+            fallback.filters = [new DropShadowFilter(1, 45, 0x000000, 0.6, 2, 2, 1, 1, false, false, false)];
             return fallback;
         }
 

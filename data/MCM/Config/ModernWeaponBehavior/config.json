@@ -344,6 +344,15 @@
           "valueOptions": {
             "sourceType": "ModSettingBool"
           }
+        },
+        {
+          "id": "bToggleWheel:AmmoSwitch",
+          "text": "$MWB_MCM_Keep_ammo_wheel_open",
+          "type": "switcher",
+          "help": "$MWB_MCM_The_ammo_wheel_stays_open_after_the_hotkey_is_released_Press_the_hotkey_again_or_Tab_to_close_it_or_click_an_ammo_type_Default_OFF",
+          "valueOptions": {
+            "sourceType": "ModSettingBool"
+          }
         }
       ]
     },

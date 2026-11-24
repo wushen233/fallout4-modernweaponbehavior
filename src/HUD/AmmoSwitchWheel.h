@@ -20,6 +20,8 @@ namespace AmmoSwitchWheel
     [[nodiscard]] bool Open();
     [[nodiscard]] bool IsOpen();
     void SetStickDirection(float a_x, float a_y);
+    void MoveSelection(int a_delta);
+    void RequestConfirm();
     [[nodiscard]] bool Confirm();
     void Cancel();
 }
