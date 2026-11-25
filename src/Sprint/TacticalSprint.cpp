@@ -181,6 +181,27 @@ namespace
         return Accepted;
     }
 
+    [[nodiscard]] bool TryEndToSprint()
+    {
+        if (!Running)
+            return false;
+
+        const auto Player = RE::PlayerCharacter::GetSingleton();
+
+        if (!Player || !Player->sprintToggled || !Sprinting(Player))
+            return false;
+
+        End("pressed sprint, back to the normal sprint"sv);
+
+        static const RE::BSFixedString BackEvent{ "MWB_SprintTacticalEnd" };
+        const bool Accepted = Player->NotifyAnimationGraphImpl(BackEvent);
+
+        if (Settings::VerboseLog())
+            REX::INFO("Tactical sprint: {} {}", BackEvent.c_str(), Accepted ? "accepted" : "refused (no tactical clip playing)");
+
+        return true;
+    }
+
     [[nodiscard]] bool TryStart()
     {
         if (!Settings::TacticalSprint() || Running)
@@ -218,7 +239,7 @@ namespace
     {
         static void Thunk(RE::PlayerInputHandler* This, const RE::ButtonEvent* Event)
         {
-            if (Event && Event->QJustPressed() && TryStart())
+            if (Event && Event->QJustPressed() && (TryEndToSprint() || TryStart()))
             {
                 const_cast<RE::ButtonEvent*>(Event)->handled = RE::InputEvent::HANDLED_RESULT::kStop;
                 return;

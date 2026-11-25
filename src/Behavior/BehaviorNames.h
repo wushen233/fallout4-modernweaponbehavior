@@ -113,7 +113,8 @@ namespace BehaviorNames
         "MWB_BoltSightedEnd"sv,
         "MWB_LeftArmRestartable"sv,
         "MWB_RightArmRestartable"sv,
-        "MWB_SprintJumpStopDone"sv
+        "MWB_SprintJumpStopDone"sv,
+        "MWB_SprintTacticalEnd"sv
     };
 
     inline constexpr std::array Variables

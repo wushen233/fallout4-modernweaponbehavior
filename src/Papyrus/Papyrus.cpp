@@ -16,6 +16,7 @@
 #include "Animation/DynamicLoop.h"
 #include "HUD/AmmoCheckDisplay.h"
 #include "Weapon/FireMode.h"
+#include "Weapon/LowerWeapon.h"
 #include "Settings/Settings.h"
 
 #include <variant>
@@ -82,6 +83,11 @@ namespace
 
         return Send("MWB_SwitchFireModeStart");
     }
+
+    bool ToggleLowerWeapon(GlobalFunctionSelf)
+    {
+        return LowerWeapon::Toggle();
+    }
 }
 
 namespace Papyrus
@@ -92,7 +98,7 @@ namespace Papyrus
 
         if (!PapyrusInterface)
         {
-            REX::WARN("No F4SE Papyrus interface: MWB.Inspect, MWB.AmmoCheck, MWB.SpecialAttack, MWB.StopArmAnimation, MWB.SwitchFireMode and the dynamic loop functions will not exist");
+            REX::WARN("No F4SE Papyrus interface: MWB.Inspect, MWB.AmmoCheck, MWB.SpecialAttack, MWB.StopArmAnimation, MWB.SwitchFireMode, MWB.ToggleLowerWeapon and the dynamic loop functions will not exist");
             return;
         }
 
@@ -106,6 +112,7 @@ namespace Papyrus
             VM->BindNativeMethod(ScriptName, "SpecialAttack", SpecialAttack);
             VM->BindNativeMethod(ScriptName, "StopArmAnimation", StopArmAnimation);
             VM->BindNativeMethod(ScriptName, "SwitchFireMode", SwitchFireMode);
+            VM->BindNativeMethod(ScriptName, "ToggleLowerWeapon", ToggleLowerWeapon);
             VM->BindNativeMethod(ScriptName, "EndDynamicLoop", EndDynamicLoop);
             VM->BindNativeMethod(ScriptName, "ReleaseDynamicLoop", ReleaseDynamicLoop);
             VM->BindNativeMethod(ScriptName, "IsDynamicLoopActive", IsDynamicLoopActive);

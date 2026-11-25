@@ -15,9 +15,10 @@ This repository holds the source code of the plugin (`MWB.dll`) as released on N
 * Dynamic loops: `MWB_dyn_StartLoop` and `MWB_dyn_EndLoop` hold the part of any animation between them in a loop until Papyrus ends it, either jumping straight to the end of the loop or letting the current pass play out.
 * Weapon HUD module (with the names given at the workbench), bullet in the chamber, drop unspent ammo on reload and manual reload, where only the reload button reloads and the trigger on an empty magazine dry fires (the last three with per weapon exclusions).
 * Hold to block for melee and fists, and firing while sprinting in first person.
+* A hotkey to lower and raise the weapon in first person, using the game's own gun down idles.
 * Charged shots fired on full charge, like a fusion rifle: weapons that charge fire by themselves once fully charged, and letting go earlier cancels the charge.
 * Hold to fire semi-automatic: holding the trigger keeps a semi-automatic gun firing, after a short delay so an ordinary click still fires once.
-* Tactical sprint (first and third person) and slide (first person), as in Call of Duty, with optional clips per weapon and a slide sound per floor material; jumping while sprinting plays the sprint stop and start clips.
+* Tactical sprint (first and third person) and slide (first person), as in Call of Duty, with optional clips per weapon and a slide sound per floor material; pressing sprint during a tactical sprint goes back to the regular sprint, and jumping while sprinting plays the sprint stop and start clips.
 * Last shot clips: a fire animation of its own for the last round in the magazine, from the hip and from the sights.
 * Bolt charge while aiming that stays in the sights, always follows the shot and carries on through a sprint.
 * See Through Scopes' 3D scopes follow the real aim, so they no longer blink at the start of a sighted bolt charge or reload.
@@ -102,7 +103,7 @@ src/
   Reload/      looped, sighted and tactical reload, sighted bolt charge, bullet in the chamber, drop unspent ammo, manual reload, bolt charge resync
   Settings/    MWB.ini, MWB_Custom.ini, the MCM settings and the MCM exclusion panel
   Sprint/      sprint transitions, third person sprint camera, firing while sprinting, tactical sprint and slide
-  Weapon/      fire mode switch and pose, slide lock, weapon bones, scope sway, aim down sight, sighted fire jiggle, full equip, last shot clips, aiming right after a save loads and the weapon graph's sights (See Through Scopes)
+  Weapon/      fire mode switch and pose, slide lock, weapon bones, scope sway, aim down sight, sighted fire jiggle, full equip, last shot clips, lowering and raising the weapon, aiming right after a save loads and the weapon graph's sights (See Through Scopes)
 ```
 
 ## License
