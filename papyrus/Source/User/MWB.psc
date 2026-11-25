@@ -43,6 +43,9 @@ Bool Function StopArmAnimation() global native
 ; Behavior .json entry.
 Bool Function SwitchFireMode() global native
 
+; Toggles the weapon down/up idle in first person.
+Bool Function ToggleLowerWeapon() global native
+
 ; Cycles the active weapon's configured OMOD switch group for each category.
 Bool Function SwitchMuzzleOMod() global native
 Bool Function SwitchSightOMod() global native

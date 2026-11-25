@@ -59,6 +59,15 @@
         "type": "RunConsoleCommand",
         "command": ""
       }
+    },
+    {
+      "id": "MWBMCMHKLowerWeapon",
+      "desc": "$MWB_MCM_Lower_raise_weapon",
+      "action": {
+        "type": "CallGlobalFunction",
+        "script": "MWB",
+        "function": "ToggleLowerWeapon"
+      }
     }
   ]
 }

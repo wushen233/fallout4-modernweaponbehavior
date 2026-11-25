@@ -1817,6 +1817,19 @@ namespace OModSwitch
             if (!match)
                 return;
 
+            std::uint32_t currentAmmoCount = 0;
+            player->GetItemCount(currentAmmoCount, const_cast<RE::TESAmmo*>(currentAmmo), false);
+            if (currentAmmoCount > 0)
+            {
+                REX::INFO("Ammo switch: current ammo {:08X} still has {} rounds in inventory; keeping this ammo type",
+                    currentAmmo->GetFormID(), currentAmmoCount);
+                if (!ManualReload::IsManualReloadRequired(live->Base, live->Instance))
+                    RequestAmmoReload(player, a_weapon, const_cast<RE::TESAmmo*>(currentAmmo), true);
+                else
+                    REX::INFO("Ammo switch: manual reload is enabled; keeping the empty magazine on the current ammo type");
+                return;
+            }
+
             REX::INFO("Ammo switch: magazine depleted for weapon {:08X}; switching to the next available configured ammo",
                 a_weapon->GetFormID());
             if (!SwitchAmmoOnGameThread(player, *live, *match, std::nullopt, true, true))

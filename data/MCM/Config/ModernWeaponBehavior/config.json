@@ -447,6 +447,12 @@
           "text": "$MWB_MCM_Switch_underbarrel_OMOD",
           "type": "hotkey",
           "help": "$MWB_MCM_Cycles_the_configured_underbarrel_OMOD_group_on_the_equipped_weapon"
+        },
+        {
+          "id": "MWBMCMHKLowerWeapon",
+          "text": "$MWB_MCM_Lower_raise_weapon",
+          "type": "hotkey",
+          "help": "$MWB_MCM_Toggle_weapon_lowering_in_first_person"
         }
       ]
     },
